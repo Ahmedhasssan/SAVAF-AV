@@ -1,0 +1,4 @@
+# ninja log v5
+4	19370	1728794584335089925	/home/ah2288/3DGS_Original/gaussian-splatting/submodules/simple-knn/build/temp.linux-x86_64-cpython-38/simple_knn.o	4e946240745beb69
+4	24420	1728794589379128248	/home/ah2288/3DGS_Original/gaussian-splatting/submodules/simple-knn/build/temp.linux-x86_64-cpython-38/ext.o	bc8ef0296347e7cb
+5	39030	1728794603991239269	/home/ah2288/3DGS_Original/gaussian-splatting/submodules/simple-knn/build/temp.linux-x86_64-cpython-38/spatial.o	7cf3d4b750cbd736
