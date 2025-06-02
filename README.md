@@ -47,26 +47,31 @@ This project supports the following datasets:
 Organize your dataset in the following structure:
 
 ```
-dataset/
-├── train/
-│   ├── class1/
-│   │   ├── image1.jpg
-│   │   └── image2.jpg
-│   └── class2/
-│       ├── image1.jpg
-│       └── image2.jpg
-└── val/
-    ├── class1/
-    └── class2/
+./release/
+├── 1
+│   ├── binaural_syn_re.wav
+│   ├── feats_train.pkl
+│   ├── feats_val.pkl
+│   ├── frames
+│   │   ├── 00001.png
+|   |   ├── ...
+│   │   ├── 00616.png
+│   ├── source_syn_re.wav
+│   ├── transforms_scale_train.json
+│   ├── transforms_scale_val.json
+│   ├── transforms_train.json
+│   └── transforms_val.json
+├── ...
+├── 13
+└── position.json
 ```
 
 ### Preprocessing Pipeline
 
 The preprocessing pipeline includes:
 
-1. **Patch Masking Preparation**: Generate mask patterns for the train and val datasets. Verify the generated images with the proper unmarked region of interest only.
-2. **Normalization**: Apply ImageNet statistics normalization
-3. **Data Augmentation**: Random horizontal flip, rotation, and color jittering
+1. **Visual Rendering**: Train the 3DGS for visual rendering and save the sparse Gaussians for Audio learning.
+2. **Audio Synthesis**: Load the locally stored Gaussians and implement binaural audio synthesis using Multihead Acoustic Field Attention Network
 
 ### Usage
 Note: Make sure to provide the correct path of the original Imagenet-1k data at line 302 of "main_pretrain.py" and pre-trained HPM model at line 45 of "src/data/load.py".
