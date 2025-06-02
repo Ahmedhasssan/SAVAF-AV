@@ -74,32 +74,45 @@ The preprocessing pipeline includes:
 2. **Audio Synthesis**: Load the locally stored Gaussians and implement binaural audio synthesis using Multihead Acoustic Field Attention Network
 
 ### Usage
-Note: Make sure to provide the correct path of the original Imagenet-1k data at line 302 of "main_pretrain.py" and pre-trained HPM model at line 45 of "src/data/load.py".
+Note: Ensure that you provide the correct path to the original dataset.
 ```bash
-# Prepare dataset
+**Visual learning and rendering**
 export CUDA_VISIBLE_DEVICES=0
-python3 -m torch.distributed.launch --master_port=29502 --nproc_per_node=1 --nnodes 1 \
-    main_pretrain.py \
-    --batch_size 128 \
-    --accum_iter 1 \
-    --model mae_vit_base_patch16_dec512d8b \
-    --input_size 224 \
-    --token_size 14 \
-    --mask_ratio 0.75 \
-    --epochs 800 \
-    --warmup_epochs 40 \
-    --blr 1.5e-4 --weight_decay 0.05 \
-    --data_path "/scratch/dataset/imagenet-1k" \
-    --output_dir  ./output \
-    --log_dir   ./log_dir/pretrain \
-    --experiment hpm_masked_unmasked_KND_ep800 \
-    --learning_loss \
-    --relative \
-    --eval
+# DATA_PATH="/home/ah2288/LP_MipNerF/data/nerf_synthetic/hotdog"
+for i in {4..13}; do
+    python train.py -s /home/ah2288/AV-3DGS/RWAVS_3DGS_data/release/$i\
+        --eval \
+        --checkpoint_iteration 30010 \
+        --iterations 30010 \
+        --checkpoint_path "/home/ah2288/AV-3DGS/output/$i" \
+        --start_checkpoint  "/home/ah2288/AV-3DGS/output/$i" \
+        # --eval_vision \
+        # --model_path "/home/ah2288/3DGS_Original/gaussian-splatting/output/kitchen_full" 
+done
 ```
 ```bash
 # Simple Way
-Bash scripts/masked_data_generation.sh
+Bash train.sh
+```
+
+```bash
+**Audio learning and Synthesis**
+export CUDA_VISIBLE_DEVICES=0
+# DATA_PATH="/home/ah2288/LP_MipNerF/data/nerf_synthetic/hotdog"
+for i in {4..13}; do
+    python train.py -s /home/ah2288/AV-3DGS/RWAVS_3DGS_data/release/$i\
+        --eval \
+        --checkpoint_iteration 30010 \
+        --iterations 30010 \
+        --checkpoint_path "/home/ah2288/AV-3DGS/output/$i" \
+        --start_checkpoint  "/home/ah2288/AV-3DGS/output/$i" \
+        # --eval_vision \
+        # --model_path "/home/ah2288/3DGS_Original/gaussian-splatting/output/kitchen_full" 
+done
+```
+```bash
+# Simple Way
+Bash train.sh
 ```
 
 ### Configuration
