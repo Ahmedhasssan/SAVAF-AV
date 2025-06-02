@@ -18,8 +18,8 @@ We present a Sparse Audio-Visual 3D rendering scheme with multi-head acoustic fi
 
 ```bash
 # Clone the repository
-git clone https://github.com/Ahmedhasssan/In-sensor-computing.git
-cd In-sensor-computing
+git clone https://github.com/Ahmedhasssan/SAVAF-AV.git
+cd SAVAF-AV
 
 # Install dependencies
 pip install -r requirements.txt
@@ -39,8 +39,8 @@ pip install -r requirements.txt
 ### Supported Datasets
 
 This project supports the following datasets:
-- ImageNet
-- Custom datasets
+- AV-NeRF
+- SoundSpaces and NVS-Replay
 
 ### Data Structure
 
