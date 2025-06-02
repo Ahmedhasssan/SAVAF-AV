@@ -188,4 +188,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - Thanks to the contributors and the open-source community
 - Special thanks to [AV-NeRF](https://liangsusan-git.github.io/project/avnerf/) and [NVS](https://arxiv.org/abs/2301.08730), which inspired this work.
-- We have borrowed some code from [AV-NeRF](https://github.com/liangsusan-git/AV-NeRF) and [NVS]([https://github.com/facebookresearch/FixRes](https://github.com/facebookresearch/novel-view-acoustic-synthesis)) for dataset loader preparation and baseline.
+- We have borrowed some code from [AV-NeRF](https://github.com/liangsusan-git/AV-NeRF) and [NVS](https://github.com/facebookresearch/novel-view-acoustic-synthesis) for dataset loader preparation and baseline.
