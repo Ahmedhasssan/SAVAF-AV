@@ -7,9 +7,8 @@ We present a Sparse Audio-Visual 3D rendering scheme with multi-head acoustic fi
 
 - [Installation](#installation)
 - [Dataset Preparation](#dataset-preparation)
-- [Training with Patch Masked Data](#training-with-patch-masked-data)
-- [Knowledge Distillation](#knowledge-distillation)
-- [Feature Distillation with Patch Masked Data](#feature-distillation-with-patch-masked-data)
+- [Training Pipeline for AV-NeRF Dataset](#training-with-SAVAF)
+- [Training for SoundSpaces](#SoundSpaces training)
 - [Results](#results)
 - [Usage](#usage)
 - [Citation](#citation)
