@@ -66,7 +66,7 @@ Organize your dataset in the following structure:
 └── position.json
 ```
 
-### Preprocessing Pipeline
+### Training Pipeline for AV-NeRF Dataset
 
 The preprocessing pipeline includes:
 
@@ -85,9 +85,7 @@ for i in {4..13}; do
         --checkpoint_iteration 30010 \
         --iterations 30010 \
         --checkpoint_path "/home/ah2288/AV-3DGS/output/$i" \
-        --start_checkpoint  "/home/ah2288/AV-3DGS/output/$i" \
-        # --eval_vision \
-        # --model_path "/home/ah2288/3DGS_Original/gaussian-splatting/output/kitchen_full" 
+        --start_checkpoint  "/home/ah2288/AV-3DGS/output/$i" 
 done
 ```
 ```bash
@@ -99,276 +97,87 @@ Bash train.sh
 **Audio learning and Synthesis**
 export CUDA_VISIBLE_DEVICES=0
 # DATA_PATH="/home/ah2288/LP_MipNerF/data/nerf_synthetic/hotdog"
-for i in {4..13}; do
-    python train.py -s /home/ah2288/AV-3DGS/RWAVS_3DGS_data/release/$i\
+WORLD_SIZE=$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n' | wc -l) 
+for i in {12..12}; do
+    # torchrun --nproc_per_node=$WORLD_SIZE --master_port=29505 main_mvsplat.py -s /home/ah2288/AV-3DGS/RWAVS_3DGS_data/release/$i\
+    echo "Processing dataset $i with $WORLD_SIZE GPUs"
+    python train_av.py -s /home/ah2288/AV-3DGS/RWAVS_3DGS_data/release/$i\
         --eval \
-        --checkpoint_iteration 30010 \
-        --iterations 30010 \
-        --checkpoint_path "/home/ah2288/AV-3DGS/output/$i" \
         --start_checkpoint  "/home/ah2288/AV-3DGS/output/$i" \
-        # --eval_vision \
-        # --model_path "/home/ah2288/3DGS_Original/gaussian-splatting/output/kitchen_full" 
+        --checkpoint_iterations 2000 \
+        --iterations 10000 \
+        --checkpoint_path "/home/ah2288/AV-3DGS/output/$i" \
 done
 ```
 ```bash
 # Simple Way
-Bash train.sh
+Bash train_av.sh
 ```
 
-### Configuration
-
-Edit the configuration file `config/data_config.yaml`:
-
-```yaml
-data:
-  output_dir: /scratch/dataset/imagenet_masked/val
-  input_size: 224
-  color_jitter: 0.4
-  aa: 'rand-m9-mstd0.5-inc1'
-  train_interpolation: 'bicubic'
-  reprob: 0.25
-  remode: 'pixel'
-  recount: 1
-
-pretrained: "/scratch/checkpoint/in-sensor-computing/output/mae_vit_base_patch16_dec512d8b_hpm_masked_unmasked_KND_ep800_temp.pth"
-
-model:
-  norm_pix_loss: False
-  vis_mask_ratio: 0.75
+### Inference only
+Provide the av_checkpoints and use flag --eval_aud
+```bash
+export CUDA_VISIBLE_DEVICES=0
+# DATA_PATH="/home/ah2288/LP_MipNerF/data/nerf_synthetic/hotdog"
+WORLD_SIZE=$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n' | wc -l) 
+for i in {12..12}; do
+    # torchrun --nproc_per_node=$WORLD_SIZE --master_port=29505 main_mvsplat.py -s /home/ah2288/AV-3DGS/RWAVS_3DGS_data/release/$i\
+    echo "Processing dataset $i with $WORLD_SIZE GPUs"
+    python train_av.py -s /home/ah2288/AV-3DGS/RWAVS_3DGS_data/release/$i\
+        --eval \
+        --start_checkpoint  "/home/ah2288/AV-3DGS/output/$i" \
+        --checkpoint_iterations 2000 \
+        --iterations 10000 \
+        --checkpoint_path "/home/ah2288/AV-3DGS/output/$i" \
+        --av_checkpoint_path "/home/ah2288/AV-3DGS/output/$i/audio_chkpnt10000.pth" \
+        --eval_aud
+done
 ```
 
-## Training with Patch Masked Data
+## Training with Soundspaces Dataset
 
 ### Overview
 
-This section describes the training process using patch masked data, which involves:
-- Masking redundant patches that do not cover the desired object
-- Training the model to reconstruct or classify from partial information
-- Improving model robustness and feature learning
-
-### Training Configuration
-
-Key training parameters:
-
-```yaml
-data:
-  output_dir: /scratch/dataset/imagenet_masked/val
-  input_size: 224
-  color_jitter: None
-  aa: 'rand-m9-mstd0.5-inc1'
-  train_interpolation: 'bicubic'
-  reprob: 0.25
-  remode: 'pixel'
-  recount: 1
-
-pretrained: "/home/ah2288/A-ViT/results/avit_base_patch16_224/checkpoint.pth"
-
-model:
-  act_mode: 4
-  gate_scale: 10.0
-  gate_center: 30
-  distr_prior_alpha: 0.001
-```
-
-### Training Script
-
-```bash
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5
-python3 -m torch.distributed.launch --master_port=29505 --nproc_per_node=6 --nnodes 1 \
-    main_finetune.py \
-    --batch_size 256 \
-    --accum_iter 1 \
-    --model vit_base_patch16 \
-    --finetune "/scratch/checkpoint/in-sensor-computing/output/mae_vit_base_patch16_dec512d8b_hpm_masked_unmasked_KND_ep800_temp.pth" \
-    --epochs 200 \
-    --start_epoch 0 \
-    --warmup_epochs 5 \
-    --blr 5e-4 --layer_decay 0.8 --weight_decay 0.05 \
-    --drop_path 0.1 --reprob 0.25 --mixup 0.8 --cutmix 1.0 \
-    --dist_eval \
-    --data_path "/scratch/dataset/imagenet_masked" \
-    --nb_classes 1000 \
-    --output_dir  ./output \
-    --log_dir   ./log_dir/finetune_masked \
-    --experiment masked_funetuning \
-    --not_resume True
-    # --eval
-```
-
-### Simple Training Command
-```bash
-1. Update the finetune_base.sh with the new model checkpoints path and the imagenet-1k data path
-2. Bash scripts/finetune_base.sh
-```
-
-## Feature Distillation for Training
-
-### Overview
-
-Feature distillation transfers knowledge from a larger teacher model (CLIP, in our case) to a smaller student model (ViT) using patch-masked data. This approach combines the benefits of model compression with robust feature learning.
-
-### Teacher-Student Architecture
-
-```
-Teacher Model (Large)    →    Student Model (Compact)
-     ↓                             ↓
-Feature Maps                 Feature Maps
-     ↓                             ↓
-Knowledge Transfer Loss    +    Task Loss
-```
-
-### Configuration
-
-```yaml
-MODEL:
-  TYPE: vit
-  NAME: fd_pretrain
-  DROP_PATH_RATE: 0.1
-  VIT:
-    EMBED_DIM: 768
-    DEPTH: 12
-    NUM_HEADS: 12
-    USE_APE: False
-    USE_RPB: False
-    USE_SHARED_RPB: True
-    USE_MEAN_POOLING: False
-    WITH_CLS_TOKEN: True
-DATA:
-  IMG_SIZE: 224
-  BATCH_SIZE: 128
-TRAIN:
-  EPOCHS: 100
-  WARMUP_EPOCHS: 10
-  BASE_LR: 3e-4
-  WARMUP_LR: 5e-7
-  MIN_LR: 5e-6
-  WEIGHT_DECAY: 0.05
-  CLIP_GRAD: 3.0
-PRINT_FREQ: 100
-SAVE_FREQ: 5
-TAG: fd_pretrain_clip_vit_base__img224__100ep
-
-```
-### Distillation Strategies
-
-- **Feature-based Distillation**: Match intermediate feature maps
-- **Distinct-features-based Distillation**: The Teacher Model gets the Original data, and the  Student Model gets the patch-masked data
-- **Patch-aware Distillation**: Focus on unmasked regions
-
-### Training Process of Feature-based Distillation
-**Use Feature Distillation branch code**
-1. **Teacher Preparation**: Load pre-trained teacher model and use masked data
-2. **Student Training**: Train the student model with distillation loss and use masked data
-3. **Loss Combination**: Combine knowledge distillation and task-specific losses
-
-```bash
-# Features distillation training
-export CUDA_VISIBLE_DEVICES=1,3,5,6,4,7
-python3 -m torch.distributed.launch --master_port=29502 --nproc_per_node=6 --nnodes 1 \
-    main_fd.py \
-    --cfg "./configs/pretrain/fd_pretrain__clip_vit_base__img224__300ep.yaml"\
-    --batch-size 256 \
-    --data-path "/scratch/dataset/imagenet_masked/" \
-    --output  ./output \
-    --enable-amp \
-    --use-checkpoint \
-    --dual-data False \
-    # --eval
-```
-
-### Simple Training Command
-```bash
-1. Update the feature_distillation.sh with the new model checkpoints path and the imagenet-1k data path
-2. Bash feature_distillation.sh
-```
-
-
-### Training Process of Distinct-feature-based Distillation
-**Use In-sensor-computing branch code**
-1. **Teacher Preparation**: Load pre-trained teacher model and use original data
-2. **Student Training**: Train the student model with distillation loss and use masked data
-3. **Loss Combination**: Combine knowledge distillation and task-specific losses
-
-```bash
-# Features distillation training
-export CUDA_VISIBLE_DEVICES=1,3,5,6
-python3 -m torch.distributed.launch --master_port=29502 --nproc_per_node=1 --nnodes 1 \
-    main_pretrain.py \
-    --batch_size 128 \
-    --accum_iter 1 \
-    --model mae_vit_base_patch16_dec512d8b \
-    --input_size 224 \
-    --token_size 14 \
-    --mask_ratio 0.75 \
-    --epochs 800 \
-    --warmup_epochs 40 \
-    --blr 1.5e-4 --weight_decay 0.05 \
-    --data_path "/scratch/dataset" \
-    --output_dir  ./output \
-    --log_dir   ./log_dir/pretrain \
-    --experiment hpm_masked_unmasked_KND_ep800 \
-    --learning_loss \
-    --relative \
-    --learn_feature_loss 'dino' \
-    --dino_path '/home/ah2288/HPM/dino_vitbase16_pretrain_full_checkpoint.pth' \
-    --dual_data
-    # --eval
-```
-
-### Simple Training Command
-```bash
-1. Update the pretrain_base.sh with the new model checkpoints path and the imagenet-1k data path
-2. Bash scripts/pretrain_base.sh
-```
-
-### Benefits with Patch Masking
-
-- Enhanced robustness of compressed models
-- Better generalization on partial information
-- Improved feature alignment between teacher and student
-- Reduced overfitting in student models
+For SoundSpaces and NVS-Replay, follow a different GitHub link: [SAVAF-SoundSpaces](https://github.com/Ahmedhasssan/SAVAF-SoundSpaces.git)
 
 ### Evaluation Metrics
 
 Track the following metrics during feature distillation:
 
-- **Classification Accuracy**: Task performance on test set
-- **Compute Reduction**: FLOPs reduction
-
-### Hyperparameter Tuning
-
-Key hyperparameters to optimize:
-
-```yaml
-hyperparameters:
-  feature_loss_weight: [0.1, 0.5, 1.0]
-  temperature: [3.0, 4.0, 5.0]
-  mask_ratio: [0.5, 0.75, 0.85]
-  adaptation_layer_dim: [128, 256, 512]
-```
+- **3D Generation Accuracy**: PSNR, SSIM and LPIPS Scores
+- **Audio Synthesis Quality**: MAG distance, ENV distance, EDT, T60 and C50
+- **Audio Synthesis Resource Utilization**: Memory and FPS
 
 ## Results
 
 ### Performance Comparison
 
-| Masking Ratio | Masking Method | Dataset | Training Method | Epochs | Accuracy |
-|---------------|----------------|---------|-----------------|--------|----------|
-| 0% | HPM-Baseline | Imagenet-1k | VIT Fine-tuning | 100 | 83.1% |
-| 80 % | A-VIT | Imagenet-1k | VIT Fine-tuning | 100 | 64.56% |
-| 60 % | A-VIT | Imagenet-1k | VIT Fine-tuning | 100 | 72% |
-| 50-60 % | HPM | Imagenet-1k | VIT Fine-tuning | 100 | 77.6% |
-| 50-60 % | HPM | Imagenet-1k | ResNet-101, Efficient-Net | 100 | 64.4% |
-| 40-50 % | HPM | Imagenet-1k | Feature Distillation (Setting 1) | 100 | 79.82 % |
-| 40-50 % | HPM | Imagenet-1k | Feature Distillation (Setting 2) | 100 | 76.92 % |
-| 40-50 % | HPM | Imagenet-1k | Feature Distillation (Setting 1) | 300 | 80.82 % |
+| Methods | Modality |  | Office ↓ |  | House ↓ |  | Apt. ↓ |  | Out. ↓ |  | Overall ↓ |  | Memory (MB) | FPS |
+|---------|---------|---|---------|---|---------|---|--------|---|--------|---|-----------|---|-------------|-----|
+|  | A | V | MAG | ENV | MAG | ENV | MAG | ENV | MAG | ENV | MAG | ENV |  |  |
+| Mono-Mono | ✓ | ✗ | 9.27 | 0.41 | 11.89 | 0.42 | 15.12 | 0.47 | 13.96 | 0.47 | 12.56 | 0.45 | - | - |
+| Mono-Energy | ✓ | ✗ | 1.54 | 0.14 | 4.31 | 0.18 | 3.91 | 0.19 | 1.63 | 0.13 | 2.85 | 0.16 | - | - |
+| Stereo-Energy | ✓ | ✗ | 1.51 | 0.14 | 4.30 | 0.18 | 3.90 | 0.19 | 1.61 | 0.12 | 2.83 | 0.16 | - | - |
+| INRAS | ✓ | ✗ | 1.41 | 0.14 | 3.51 | 0.18 | 3.42 | 0.20 | 1.50 | 0.13 | 2.46 | 0.16 | 1.24 | 180 |
+| NAF | ✓ | ✗ | 1.24 | 0.14 | 3.26 | 0.18 | 3.35 | 0.19 | 1.28 | 0.12 | 2.28 | 0.16 | 1.10 | 99 |
+| VAM | ✓ | ✓ | 0.98 | 0.14 | 2.10 | 0.16 | 2.33 | 0.20 | 0.89 | 0.12 | 1.57 | 0.16 | 186.8 | 66 |
+| AV-NeRF | ✓ | ✓ | 0.93 | 0.13 | 2.01 | 0.16 | 2.23 | 0.18 | 0.85 | 0.11 | 1.50 | 0.15 | 48 | 79 |
+| ViGAS | ✓ | ✓ | 0.94 | 0.13 | 2.08 | 0.16 | 2.29 | 0.19 | 0.86 | 0.11 | 1.52 | 0.15 | 52.4 | 34 |
+| AV-GS | ✓ | ✓ | 0.86 | 0.12 | 1.97 | 0.15 | 2.03 | 0.18 | 0.79 | 0.11 | 1.42 | 0.14 | 18.40 | 12.5 |
+| AV-Cloud | ✓ | ✓ | 0.93 | 0.13 | 2.10 | 0.16 | 2.28 | 0.19 | 0.86 | 0.107 | 1.53 | 0.15 | 15.64 | 83 |
+| SAVAF (our) | ✓ | ✓ | **0.85** | **0.12** | **1.90** | **0.14** | **2.08** | **0.17** | **0.80** | **0.10** | **1.40** | **0.13** | **5.44** | **115** |
 
 ### Ablation Studies
 
 Results showing the impact of different components:
 
-1. MAE training
-2. CNN architecture training (To repeat this experiment, use the cnn_training branch)
-3. Feature distillation-based training
+| Methods | MAG | ENV | Memory (MB) |
+|---------|-----|-----|-------------|
+| Baseline | 1.50 | 0.150 | 48 |
+| **SAVAF** | **1.40** | **0.130** | **5.44** |
+| w MLP | 1.45 | 0.140 | 49.5 |
+| w/o post-proc. | 0.143 | 0.136 | 4.60 |
+| w head-dim 4 | 1.46 | 0.137 | 3.50 |
 
 ## Citation
 
@@ -379,5 +188,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgments
 
 - Thanks to the contributors and the open-source community
-- Special thanks to [HPM](https://openaccess.thecvf.com/content/CVPR2023/html/Wang_Hard_Patches_Mining_for_Masked_Image_Modeling_CVPR_2023_paper.html), that inspired this work.
-- We have borrowed a lot of code from [HPM](https://github.com/Haochen-Wang409/HPM) and [FixRes](https://github.com/facebookresearch/FixRes) for CNN based trainig.
+- Special thanks to [AV-NeRF](https://liangsusan-git.github.io/project/avnerf/) and [NVS](https://arxiv.org/abs/2301.08730), which inspired this work.
+- We have borrowed some code from [AV-NeRF](https://github.com/liangsusan-git/AV-NeRF) and [NVS]([https://github.com/facebookresearch/FixRes](https://github.com/facebookresearch/novel-view-acoustic-synthesis)) for dataset loader preparation and baseline.
