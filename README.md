@@ -78,7 +78,7 @@ Note: Ensure that you provide the correct path to the original dataset.
 **Visual learning and rendering**
 export CUDA_VISIBLE_DEVICES=0
 # DATA_PATH="/home/ah2288/LP_MipNerF/data/nerf_synthetic/hotdog"
-for i in {4..13}; do
+for i in {1..13}; do
     python train.py -s /home/ah2288/AV-3DGS/RWAVS_3DGS_data/release/$i\
         --eval \
         --checkpoint_iteration 30010 \
