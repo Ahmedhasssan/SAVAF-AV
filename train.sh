@@ -1,13 +1,16 @@
-export CUDA_VISIBLE_DEVICES=0
-# DATA_PATH="/home/ah2288/LP_MipNerF/data/nerf_synthetic/hotdog"
-for i in {4..13}; do
-    python train.py -s /home/ah2288/AV-3DGS/RWAVS_3DGS_data/release/$i\
+export HIP_VISIBLE_DEVICES=0
+DATA_DIR="/workspace/data/release"
+OUTPUT_DIR="/workspace/SAVAF-AV/output"
+mkdir -p "${OUTPUT_DIR}"
+
+for i in {1..13}; do
+    echo "==> Training scene $i"
+    python train.py -s ${DATA_DIR}/$i \
+        -m "${OUTPUT_DIR}/$i" \
         --eval \
-        --checkpoint_iteration 30010 \
         --iterations 30010 \
-        --checkpoint_path "/home/ah2288/AV-3DGS/output/$i" \
-        --start_checkpoint  "/home/ah2288/AV-3DGS/output/$i" \
-        # --eval_vision \
-        # --model_path "/home/ah2288/3DGS_Original/gaussian-splatting/output/kitchen_full" 
+        --checkpoint_iteration 30010 \
+        --checkpoint_path "${OUTPUT_DIR}/$i"
+        # --start_checkpoint "${OUTPUT_DIR}/$i" \
+        # --eval_vision
 done
-    #/home/ah2288/gaussian-splatting/data/360_v2/bicycle --eval  #/home/ah2288/gaussian-splatting/data/tandt/t --eval 

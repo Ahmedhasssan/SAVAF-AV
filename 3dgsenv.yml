@@ -292,4 +292,4 @@ dependencies:
       - yapf==0.40.2
       - yarl==1.9.4
       - zipp==3.17.0
-prefix: /home/ah2288/.conda/envs/ss_gaussian_splatting
+prefix: /opt/conda/envs/ss_gaussian_splatting

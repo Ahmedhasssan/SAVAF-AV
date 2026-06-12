@@ -17,7 +17,28 @@ import os
 from utils.system_utils import mkdir_p
 from plyfile import PlyData, PlyElement
 from utils.sh_utils import RGB2SH
-from simple_knn._C import distCUDA2
+
+try:
+    from simple_knn._C import distCUDA2
+except ImportError:
+    def distCUDA2(points):
+        """Pure PyTorch fallback for simple_knn._C.distCUDA2.
+        Returns mean SQUARED distance to 3 nearest neighbors for each point.
+        """
+        K = 3
+        N = points.shape[0]
+        if N <= K:
+            return torch.zeros(N, device=points.device)
+        batch_size = min(N, 4096)
+        result = torch.empty(N, device=points.device)
+        for i in range(0, N, batch_size):
+            end = min(i + batch_size, N)
+            dists_sq = torch.cdist(points[i:end], points).pow(2)  # squared L2
+            dists_sq[:, i:end].fill_diagonal_(float('inf'))
+            topk = dists_sq.topk(K, dim=1, largest=False).values  # [batch, K]
+            result[i:end] = topk.mean(dim=1)
+        return result
+
 from utils.graphics_utils import BasicPointCloud
 from utils.general_utils import strip_symmetric, build_scaling_rotation
 
@@ -403,5 +424,9 @@ class GaussianModel:
         torch.cuda.empty_cache()
 
     def add_densification_stats(self, viewspace_point_tensor, update_filter):
-        self.xyz_gradient_accum[update_filter] += torch.norm(viewspace_point_tensor.grad[update_filter,:2], dim=-1, keepdim=True)
+        if viewspace_point_tensor.grad is None:
+            return
+        grad = viewspace_point_tensor.grad[update_filter, :2]
+        grad = torch.nan_to_num(grad, nan=0.0, posinf=0.0, neginf=0.0)
+        self.xyz_gradient_accum[update_filter] += torch.norm(grad, dim=-1, keepdim=True)
         self.denom[update_filter] += 1

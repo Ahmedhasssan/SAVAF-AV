@@ -14,7 +14,6 @@ from torch import nn
 import numpy as np
 from utils.graphics_utils import getWorld2View2, getProjectionMatrix
 import cv2
-import skvideo.io
 from pathlib import Path
 from typing import Union
 from einops import rearrange, repeat
@@ -152,6 +151,8 @@ def save_video(
     frames = []
     for image in images:
         frames.append(prep_image(image))
+
+    import skvideo.io
 
     writer = skvideo.io.FFmpegWriter(path, 
                                      outputdict={'-pix_fmt': 'yuv420p', '-crf': '21', 

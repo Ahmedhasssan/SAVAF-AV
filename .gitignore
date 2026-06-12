@@ -1,0 +1,41 @@
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Build / packaging artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+
+# CUDA / HIP build outputs from submodules
+submodules/diff-gaussian-rasterization/build/
+submodules/diff-gaussian-rasterization/hip_rasterizer/
+submodules/diff-gaussian-rasterization/rasterize_points.hip
+submodules/simple-knn/build/
+
+# Training / experiment outputs (large, regenerable)
+output/
+logs/
+paper_plot/
+runs/
+wandb/
+
+# Datasets (large, downloaded separately)
+data/
+
+# Editor / OS clutter
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local env files
+.env
+.env.local
+
+# Jupyter
+.ipynb_checkpoints/

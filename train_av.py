@@ -55,7 +55,7 @@ from paper_plots import create_publication_quality_plot
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from, checkpoint_path, av_model, eval_aud, av_checkpoint_path):
     first_iter = 0
     if av_checkpoint_path:
-        checkpoint_av = torch.load(av_checkpoint_path)
+        checkpoint_av = torch.load(av_checkpoint_path, weights_only=False)
         model_state_dict = checkpoint_av[0]  # First element is the model state dict
         av_model.load_state_dict(model_state_dict)
     print("Loading checkpoint from: ", args.av_checkpoint_path)
@@ -69,9 +69,16 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                                                             gamma=0.1)
     gaussians.training_setup(opt)
     if checkpoint:
-        (model_params, first_iter) = torch.load(
-            os.path.join(checkpoint, "chkpnt" + str(30000) + ".pth")
-        )
+        import glob
+        ckpt_files = sorted(glob.glob(os.path.join(checkpoint, "chkpnt*.pth")))
+        if not ckpt_files:
+            raise FileNotFoundError(f"No visual chkpnt*.pth found in {checkpoint}")
+        ckpt_file = ckpt_files[-1]
+        print(f"Loading visual checkpoint: {ckpt_file}")
+        # weights_only=False: PyTorch 2.6 changed the default to True. Stage-1
+        # checkpoints contain numpy scalars (e.g. EMA loss) which aren't in the
+        # safe-globals list. Safe because we generated these checkpoints ourselves.
+        (model_params, first_iter) = torch.load(ckpt_file, weights_only=False)
         gaussians.restore(model_params, opt)
     bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
@@ -104,7 +111,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         if eval_aud:
             # Pick a random Camera
             if av_checkpoint_path:
-                checkpoint = torch.load(av_checkpoint_path)
+                checkpoint = torch.load(av_checkpoint_path, weights_only=False)
                 model_state_dict = checkpoint[0]  # First element is the model state dict
                 av_model.load_state_dict(model_state_dict)
             print("Loading checkpoint from: ", args.av_checkpoint_path)
@@ -165,8 +172,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 eval_audio(av_model, viewpoint_test, gaussians, None, save=False)
                 # inference(gaussians, "./inference_3d", pipe, "office", iteration, bg)
 
-from kiui.cam import orbit_camera
-import imageio
+# Lazy/optional imports — only required by the 3D-orbit inference helpers below,
+# which are not exercised by the standard Stage-2 audio-visual training loop.
+try:
+    from kiui.cam import orbit_camera
+    import imageio
+except ImportError:
+    orbit_camera = None
+    imageio = None
 
 def get_cam_views(cam_poses):
     c2w = cam_poses
@@ -272,6 +285,15 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint_path", type=str, default = None)
     parser.add_argument("--av_checkpoint_path", type=str, default = None)
     parser.add_argument('--eval_aud', action='store_true',help='Perform evaluation only')
+    parser.add_argument(
+        "--av-resolution",
+        nargs=2,
+        type=int,
+        default=[64, 180],
+        metavar=("HEIGHT", "WIDTH"),
+        help="Gaussian feature-map resolution (H W) for MixDiffWithCrossAttention. "
+             "Default 64 180 (~5.8 MB). Original/full setting: 170 480.",
+    )
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
     
@@ -284,8 +306,11 @@ if __name__ == "__main__":
     network_gui.init(args.ip, args.port)
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
 
-    # av_model = MixDiffWithCrossAttention(conv=True, p=0.1)
-    av_model = MixDiffWithPatchWiseAttention(conv=True, p=0.1).cuda()
+    av_resolution = tuple(args.av_resolution)
+    print(f"AV feature-map resolution: {av_resolution[0]}x{av_resolution[1]} "
+          f"(feature_dim={av_resolution[0] * av_resolution[1]})")
+    av_model = MixDiffWithCrossAttention(conv=True, p=0.1, resolution=av_resolution).cuda()
+    #av_model = MixDiffWithPatchWiseAttention(conv=True, p=0.1).cuda()
 
     training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from, args.checkpoint_path, av_model, args.eval_aud, args.av_checkpoint_path)
 

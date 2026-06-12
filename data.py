@@ -11,7 +11,6 @@ from PIL import Image
 import soundfile as sf
 
 import torch
-import torchaudio
 import torchvision.transforms as T
 
 class RWAVSDataset(torch.utils.data.Dataset):
@@ -124,11 +123,7 @@ class RWAVSDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.data_list)
 
-def vector_angle(xy):
-    radians = math.atan2(xy[0], xy[1])
-    return radians / (1.01 * np.pi) # trick to make sure ori in open set (-1, 1)
-
-def relative_angle(source, xy, ori): # (-1, 1)
+def relative_angle(source, xy, ori):  # (-1, 1)
     s = source - xy
     s = s / np.linalg.norm(s)
     d = ori / np.linalg.norm(ori)

@@ -1,15 +1,38 @@
-export CUDA_VISIBLE_DEVICES=0
-# DATA_PATH="/home/ah2288/LP_MipNerF/data/nerf_synthetic/hotdog"
-WORLD_SIZE=$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n' | wc -l) 
-for i in {12..12}; do
-    # torchrun --nproc_per_node=$WORLD_SIZE --master_port=29505 main_mvsplat.py -s /home/ah2288/AV-3DGS/RWAVS_3DGS_data/release/$i\
-    echo "Processing dataset $i with $WORLD_SIZE GPUs"
-    python train_av.py -s /home/ah2288/AV-3DGS/RWAVS_3DGS_data/release/$i\
-        --eval \
-        --start_checkpoint  "/home/ah2288/AV-3DGS/output/$i" \
-        --checkpoint_iterations 2000 \
-        --iterations 10000 \
-        --checkpoint_path "/home/ah2288/AV-3DGS/output/$i" \
-        --av_checkpoint_path "/home/ah2288/AV-3DGS/output/$i/audio_chkpnt10000.pth" \
-        --eval_aud
-done
+#!/bin/bash
+# Stage-2 audio-visual training for a single scene.
+#
+# Usage:
+#   bash train_av.sh           # trains scene 1 on the GPU set by HIP_VISIBLE_DEVICES (default 0)
+#   bash train_av.sh 5         # trains scene 5
+#   HIP_VISIBLE_DEVICES=3 bash train_av.sh 5   # trains scene 5 on GPU 3
+#   AV_RESOLUTION="170 480" bash train_av.sh 6   # higher-res feature map (larger model)
+#
+# AV_RESOLUTION controls MixDiffWithCrossAttention feature-map size (H W).
+# Default 64 180 (~5.8 MB). Use 170 480 for the original/full model size.
+# Audio checkpoints are resolution-specific — retrain stage 2 after changing this.
+
+set -e
+
+SCENE="${1:-1}"
+export HIP_VISIBLE_DEVICES="${HIP_VISIBLE_DEVICES:-0}"
+export CUDA_VISIBLE_DEVICES="${HIP_VISIBLE_DEVICES}"
+
+DATA_DIR="${DATA_DIR:-/workspace/data/release}"
+OUTPUT_DIR="${OUTPUT_DIR:-/workspace/SAVAF-AV/output}"
+
+read -r AV_RES_H AV_RES_W <<< "${AV_RESOLUTION:-64 180}"
+
+# Unique network_gui port per scene so parallel runs don't collide on bind(6099).
+NETWORK_GUI_PORT=$((6099 + SCENE))
+
+echo "==> Audio-visual training for scene ${SCENE} on GPU(s) ${HIP_VISIBLE_DEVICES}"
+echo "    Feature-map resolution: ${AV_RES_H}x${AV_RES_W} (gui port ${NETWORK_GUI_PORT})"
+python train_av.py -s "${DATA_DIR}/${SCENE}" \
+    -m "${OUTPUT_DIR}/${SCENE}" \
+    --eval \
+    --start_checkpoint "${OUTPUT_DIR}/${SCENE}" \
+    --iterations 10000 \
+    --checkpoint_iterations 2000 \
+    --checkpoint_path "${OUTPUT_DIR}/${SCENE}" \
+    --av-resolution "${AV_RES_H}" "${AV_RES_W}" \
+    --port "${NETWORK_GUI_PORT}"

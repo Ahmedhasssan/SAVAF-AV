@@ -52,7 +52,8 @@ def compute_speech_file(split, speech_id):
     split_mapping = {'train': 'train-clean-360', 'val': 'dev-clean', 'val-seen': 'dev-clean', 'test': 'test-clean',
                      'test-seen': 'test-clean'}
     book_id, ch_id, sec_id = speech_id.split('-')
-    path = os.path.join(f'/share/seo/data/LibriSpeech', split_mapping[split], book_id, ch_id, speech_id + '.flac')
+    librispeech_root = os.environ.get('LIBRISPEECH_DIR', '/workspace/data/LibriSpeech')
+    path = os.path.join(librispeech_root, split_mapping[split], book_id, ch_id, speech_id + '.flac')
     return path
 
 
@@ -114,7 +115,9 @@ class SoundSpacesNVASDataset(Dataset):
         active_speeches = dict()
         for spk_id in active_spk_indices:
             if self.args.use_same_speech:
-                speech_file = '/share/seo/data/LibriSpeech/train-clean-360/100/121669/100-121669-0004.flac'
+                librispeech_root = os.environ.get('LIBRISPEECH_DIR', '/workspace/data/LibriSpeech')
+                speech_file = os.path.join(
+                    librispeech_root, 'train-clean-360/100/121669/100-121669-0004.flac')
             else:
                 speech_file = compute_speech_file(self.split, speakers[int(spk_id)]['speech'])
             sr, speech = wavfile.read(speech_file.replace('LibriSpeech', 'LibriSpeech-wav'))

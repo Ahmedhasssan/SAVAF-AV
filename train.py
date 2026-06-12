@@ -57,8 +57,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     first_iter = 0
     loss_lpips = lpips.LPIPS(net='alex').cpu().eval()
     # loss_lpips=loss_lpips.to('cuda').cpu().eval()
-    if not os.path.exists(checkpoint_path):
-        os.mkdir(checkpoint_path)
+    os.makedirs(checkpoint_path, exist_ok=True)
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
     scene = Scene(dataset, gaussians, checkpoint_path)

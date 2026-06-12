@@ -2,190 +2,291 @@
 
 We present a Sparse Audio-Visual 3D rendering scheme with multi-head acoustic field attention (SAVAF) using minimal Gaussian as visual cues. In SAVAF, we implement an explicit 2D mapped patch-based audio-visual attention to guide the binaural audio generation on learned 3D Gaussian primitives. First, SAVAF, considering the 3D geometry, accounts for listener-source spatial relationships and implements adaptive pose-specific Gaussian filtering to reduce memory utilization and inference time for on-device 3D rendering. Second, we implement the combined audio-visual self-attention for sound source localization and sound orientation-based cross-attention to generate noise-free left and right sound channels for the binaural sound synthesis at the receiver end. Combined with audio-visual rendering backbones, the proposed SAVAF achieves the average performance of 25.9 PSNR, 0.83 SSIM, 0.053 LPIPS, 0.13 ENV, and 1.40 Magnitude distance on the SoTA audio-visual RWAVS dataset.
 
-
 ## Table of Contents
 
 - [Installation](#installation)
 - [Dataset Preparation](#dataset-preparation)
-- [Training Pipeline for AV-NeRF Dataset](#training-with-SAVAF)
-- [Training for SoundSpaces](#SoundSpaces-training)
-- [Results](#results)
-- [Usage](#usage)
+- [Quick Start (Full Pipeline)](#quick-start-full-pipeline)
+- [Training (Step by Step)](#training-step-by-step)
+- [Evaluation](#evaluation)
+- [RWAVS Scene Categories](#rwavs-scene-categories)
+- [Repository Layout](#repository-layout)
+- [SoundSpaces Benchmark](#soundspaces-benchmark)
 - [Citation](#citation)
+- [License](#license)
+- [Acknowledgments](#acknowledgments)
 
 ## Installation
 
+### Recommended hardware
+
+**AMD MI300X** (gfx942) is the recommended system for training and evaluation. The provided Docker image, ROCm stack, and `amd_gsplat` build target this platform. Other AMD ROCm GPUs may work but are not the primary test configuration.
+
+### Docker (recommended, AMD ROCm)
+
+The project ships with a ROCm PyTorch Docker image and a persistent dev container.
+
 ```bash
-# Clone the repository
 git clone https://github.com/Ahmedhasssan/SAVAF-AV.git
 cd SAVAF-AV
 
-# Install dependencies
-pip install -r requirements.txt
+# First run: builds the image and starts the container
+./start-docker.sh
+
+# Force image rebuild
+./start-docker.sh --rebuild
+
+# Drop and recreate the container
+./start-docker.sh --fresh
 ```
+
+Inside the container, the repo is mounted at `/workspace/SAVAF-AV` and data at `/workspace/data`.
 
 ### Requirements
 
-- Python >= 3.10.0
-- PyTorch >= 2.6.0
-- torchvision >= 0.20.0
-- numpy
-- opencv-python
-- PIL
+- Python >= 3.10
+- PyTorch >= 2.6 (ROCm build for AMD GPUs)
+- See `Dockerfile` for the full dependency list (`amd_gsplat`, `librosa`, `einops`, `scikit-video`, etc.)
 
 ## Dataset Preparation
 
 ### Supported Datasets
 
-This project supports the following datasets:
-- AV-NeRF
-- SoundSpaces and NVS-Replay
+- **RWAVS** — primary dataset for this repo (real-world audio-visual scenes 1–13)
+- **SoundSpaces / NVS-Replay** — see [SoundSpaces Benchmark](#soundspaces-benchmark)
 
-### Data Structure
+### Download RWAVS
 
-Organize your dataset in the following structure:
+Download and extract the dataset into `data/`:
+
+```bash
+mkdir -p data
+huggingface-cli download susanliang/RWAVS RWAVS_Release.zip \
+    --repo-type dataset --local-dir data
+cd data && unzip -o RWAVS_Release.zip
+```
+
+Expected layout (host path `data/release/`, container path `/workspace/data/release/`):
 
 ```
-./release/
+release/
 ├── 1
-│   ├── binaural_syn_re.wav
-│   ├── feats_train.pkl
-│   ├── feats_val.pkl
-│   ├── frames
-│   │   ├── 00001.png
-|   |   ├── ...
-│   │   ├── 00616.png
-│   ├── source_syn_re.wav
-│   ├── transforms_scale_train.json
-│   ├── transforms_scale_val.json
-│   ├── transforms_train.json
-│   └── transforms_val.json
+│   ├── binaural_syn_re.wav
+│   ├── feats_train.pkl
+│   ├── feats_val.pkl
+│   ├── frames/
+│   ├── source_syn_re.wav
+│   ├── transforms_train.json
+│   └── transforms_val.json
 ├── ...
 ├── 13
 └── position.json
 ```
 
-### Training Pipeline for AV-NeRF Dataset
+## Quick Start (Full Pipeline)
 
-The preprocessing pipeline includes:
+`run_full_pipeline.sh` runs all three stages end-to-end:
 
-1. **Visual Rendering**: Train the 3DGS for visual rendering and save the sparse Gaussians for Audio learning.
-2. **Audio Synthesis**: Load the locally stored Gaussians and implement binaural audio synthesis using Multihead Acoustic Field Attention Network
+1. **Stage 1** — visual 3DGS (`train.py`) → `output/<scene>/chkpnt30010.pth`
+2. **Stage 2** — audio-visual training (`train_av_parallel.sh`) → `output/<scene>/audio_chkpnt*.pth`
+3. **Stage 3** — checkpoint sweep + **RWAVS Scene Categories** table (`eval_checkpoints.sh`)
 
-### Usage
-Note: Ensure that you provide the correct path to the original dataset.
 ```bash
-**Visual learning and rendering**
-export CUDA_VISIBLE_DEVICES=0
-# DATA_PATH="/home/ah2288/LP_MipNerF/data/nerf_synthetic/hotdog"
-for i in {1..13}; do
-    python train.py -s /home/ah2288/AV-3DGS/RWAVS_3DGS_data/release/$i\
-        --eval \
-        --checkpoint_iteration 30010 \
-        --iterations 30010 \
-        --checkpoint_path "/home/ah2288/AV-3DGS/output/$i" \
-        --start_checkpoint  "/home/ah2288/AV-3DGS/output/$i" 
-done
-```
-```bash
-# Simple Way
-Bash train.sh
+cd /workspace/SAVAF-AV
+
+# All 13 scenes; stage 2 uses 2 GPUs in parallel
+N_GPUS=2 bash run_full_pipeline.sh
+
+# Office scenes only (1–5)
+SCENES="1 2 3 4 5" N_GPUS=2 bash run_full_pipeline.sh
 ```
 
+Useful flags:
+
+
+| Variable        | Default    | Description                                   |
+| --------------- | ---------- | --------------------------------------------- |
+| `SCENES`        | `1 2 … 13` | Scenes to process                             |
+| `N_GPUS`        | `2`        | Parallel GPUs for stage 2                     |
+| `STAGE1_GPU`    | `0`        | GPU for sequential stage 1                    |
+| `EVAL_GPU`      | `0`        | GPU for stage 3 eval sweep                    |
+| `SKIP_STAGE1`   | `0`        | Set `1` if Gaussians already exist            |
+| `SKIP_STAGE2`   | `0`        | Set `1` to skip AV training                   |
+| `SKIP_EVAL`     | `0`        | Set `1` to skip final summary                 |
+| `SKIP_EXISTING` | `0`        | Set `1` to skip scenes with final checkpoints |
+| `AV_RESOLUTION` | `64 180`   | Feature-map height/width for stage 2 and eval |
+
+
+Logs are written to `logs/stage1/scene_<N>.log` and `logs/stage2/scene_<N>.log`.
+
+### Model resolution (`AV_RESOLUTION`)
+
+Stage 2 projects 3D Gaussians onto a 2D feature map before audio attention. The map size is controlled by `AV_RESOLUTION="HEIGHT WIDTH"` (or `--av-resolution HEIGHT WIDTH` in `train_av.py`).
+
+
+| Setting           | Resolution | Approx. `feature_proj` size | Notes                                   |
+| ----------------- | ---------- | --------------------------- | --------------------------------------- |
+| Default (compact) | `64 180`   | ~5.8 MB                     | Current default                         |
+| Mid               | `85 240`   | ~10 MB                      | Good stepping stone                     |
+| Full              | `170 480`  | ~42 MB                      | Original setting in `model.py` comments |
+
+
 ```bash
-**Audio learning and Synthesis**
-export CUDA_VISIBLE_DEVICES=0
-# DATA_PATH="/home/ah2288/LP_MipNerF/data/nerf_synthetic/hotdog"
-WORLD_SIZE=$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n' | wc -l) 
-for i in {12..12}; do
-    # torchrun --nproc_per_node=$WORLD_SIZE --master_port=29505 main_mvsplat.py -s /home/ah2288/AV-3DGS/RWAVS_3DGS_data/release/$i\
-    echo "Processing dataset $i with $WORLD_SIZE GPUs"
-    python train_av.py -s /home/ah2288/AV-3DGS/RWAVS_3DGS_data/release/$i\
-        --eval \
-        --start_checkpoint  "/home/ah2288/AV-3DGS/output/$i" \
-        --checkpoint_iterations 2000 \
-        --iterations 10000 \
-        --checkpoint_path "/home/ah2288/AV-3DGS/output/$i" \
-done
+# Higher resolution — retrain stage 2; old audio checkpoints are not compatible
+AV_RESOLUTION="170 480" SCENES="6 12" N_GPUS=2 bash train_av_parallel.sh
+
+# Eval must use the same resolution as training
+AV_RESOLUTION="170 480" bash eval_checkpoints.sh 6 12
 ```
+
+Stage 1 visual Gaussians are unchanged; only stage 2 needs to be re-run when you change resolution.
+
+## Training (Step by Step)
+
+### Stage 1: Visual 3D Gaussian Splatting
+
+Trains sparse Gaussians for each scene (~30k iterations per scene).
+
 ```bash
-# Simple Way
-Bash train_av.sh
+cd /workspace/SAVAF-AV
+bash train.sh
+```
+
+Or a single scene:
+
+```bash
+HIP_VISIBLE_DEVICES=0 python train.py \
+    -s /workspace/data/release/1 \
+    -m /workspace/SAVAF-AV/output/1 \
+    --eval \
+    --iterations 30010 \
+    --checkpoint_iteration 30010 \
+    --checkpoint_path /workspace/SAVAF-AV/output/1
+```
+
+### Stage 2: Audio-Visual Training
+
+Loads frozen Gaussians from stage 1 and trains `MixDiffWithCrossAttention` (~10k iterations).
+
+**Single scene:**
+
+```bash
+bash train_av.sh 1          # scene 1 on GPU 0
+HIP_VISIBLE_DEVICES=1 bash train_av.sh 5
+```
+
+**Multiple scenes in parallel** (one GPU per scene, auto-queues when GPUs are busy):
+
+```bash
+SCENES="1 2 3 4 5" N_GPUS=2 bash train_av_parallel.sh
+SCENES="6 7 8 9 10 11 12 13" N_GPUS=7 bash train_av_parallel.sh
+```
+
+Per-scene logs: `logs/stage2/scene_<N>.log`
+
+## Evaluation
+
+### Checkpoint sweep
+
+`eval_checkpoints.sh` evaluates every `audio_chkpnt*.pth` for the given scenes, picks the best checkpoint per scene (min ENV, then MAG), and prints results grouped by RWAVS category with comparison to the published SAVAF (our) baseline.
+
+```bash
+# Single scene
+HIP_VISIBLE_DEVICES=0 bash eval_checkpoints.sh 6
+
+# Multiple scenes
+bash eval_checkpoints.sh 6 10 12
+SCENES="1 2 3 4 5" bash eval_checkpoints.sh
 ```
 
 ### Inference only
-Provide the av_checkpoints and use flag --eval_aud
+
+Evaluate a specific audio checkpoint without retraining:
+
 ```bash
-export CUDA_VISIBLE_DEVICES=0
-# DATA_PATH="/home/ah2288/LP_MipNerF/data/nerf_synthetic/hotdog"
-WORLD_SIZE=$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n' | wc -l) 
-for i in {12..12}; do
-    # torchrun --nproc_per_node=$WORLD_SIZE --master_port=29505 main_mvsplat.py -s /home/ah2288/AV-3DGS/RWAVS_3DGS_data/release/$i\
-    echo "Processing dataset $i with $WORLD_SIZE GPUs"
-    python train_av.py -s /home/ah2288/AV-3DGS/RWAVS_3DGS_data/release/$i\
-        --eval \
-        --start_checkpoint  "/home/ah2288/AV-3DGS/output/$i" \
-        --checkpoint_iterations 2000 \
-        --iterations 10000 \
-        --checkpoint_path "/home/ah2288/AV-3DGS/output/$i" \
-        --av_checkpoint_path "/home/ah2288/AV-3DGS/output/$i/audio_chkpnt10000.pth" \
-        --eval_aud
-done
+python train_av.py \
+    -s /workspace/data/release/12 \
+    -m /workspace/SAVAF-AV/output/12 \
+    --eval \
+    --start_checkpoint /workspace/SAVAF-AV/output/12 \
+    --checkpoint_path /workspace/SAVAF-AV/output/12 \
+    --av_checkpoint_path /workspace/SAVAF-AV/output/12/audio_chkpnt10000.pth \
+    --av-resolution 64 180 \
+    --eval_aud
 ```
 
-## Training with Soundspaces Dataset
+### Visual metrics (PSNR / SSIM / LPIPS)
 
-### Overview
+After stage 1, run standard 3DGS metrics:
 
-For SoundSpaces and NVS-Replay, follow a different GitHub link: [SAVAF-SoundSpaces](https://github.com/Ahmedhasssan/SAVAF-SoundSpaces.git)
+```bash
+python metrics.py -m /workspace/SAVAF-AV/output/12
+```
+
+## RWAVS Scene Categories
+
+The RWAVS benchmark groups 13 scenes into four environment types (same mapping as [AV-NeRF](https://github.com/liangsusan-git/AV-NeRF)):
+
+
+| Category  | Scenes | Metrics  |
+| --------- | ------ | -------- |
+| Office    | 1–5    | Office ↓ |
+| House     | 6–8    | House ↓  |
+| Apartment | 9–11   | Apt. ↓   |
+| Outdoor   | 12–13  | Out. ↓   |
+
+
+`eval_checkpoints.sh` and `run_full_pipeline.sh` (stage 3) print a **RWAVS Scene Categories** table with MAG and ENV averages per category and overall.
+
+## Repository Layout
+
+```
+SAVAF-AV/
+├── train.py                  # Stage 1: visual 3DGS
+├── train.sh                    # Stage 1 launcher (all scenes)
+├── train_av.py                 # Stage 2: audio-visual model
+├── train_av.sh                 # Stage 2 launcher (single scene)
+├── train_av_parallel.sh        # Stage 2 parallel launcher
+├── run_full_pipeline.sh        # End-to-end pipeline (stage 1 + 2 + eval)
+├── eval_checkpoints.sh         # Checkpoint sweep + MAG/ENV summary
+├── start-docker.sh             # ROCm Docker dev container
+├── model.py                    # MixDiffWithCrossAttention and helpers
+├── data.py                     # RWAVSDataset loader
+├── train_av_ss.py              # SoundSpaces variant (separate benchmark)
+├── output/                     # Checkpoints (gitignored)
+├── logs/                       # Training logs (gitignored)
+└── data/release/               # RWAVS dataset (gitignored)
+```
+
+## SoundSpaces Benchmark
+
+For SoundSpaces and NVS-Replay, use the dedicated repo: [SAVAF-SoundSpaces](https://github.com/Ahmedhasssan/SAVAF-SoundSpaces.git)
+
+This repo retains `train_av_ss.py`, `train_soundspaces_av.sh`, and `datasets/` for SoundSpaces experiments.
 
 ### Evaluation Metrics
 
-Track the following metrics during feature distillation:
-
-- **3D Generation Accuracy**: PSNR, SSIM and LPIPS Scores
-- **Audio Synthesis Quality**: MAG distance, ENV distance, EDT, T60 and C50
-- **Audio Synthesis Resource Utilization**: Memory and FPS
-
-## Results
-
-### Performance Comparison
-
-| Methods | Modality |  | Office ↓ |  | House ↓ |  | Apt. ↓ |  | Out. ↓ |  | Overall ↓ |  | Memory (MB) | FPS |
-|---------|---------|---|---------|---|---------|---|--------|---|--------|---|-----------|---|-------------|-----|
-|  | A | V | MAG | ENV | MAG | ENV | MAG | ENV | MAG | ENV | MAG | ENV |  |  |
-| Mono-Mono | ✓ | ✗ | 9.27 | 0.41 | 11.89 | 0.42 | 15.12 | 0.47 | 13.96 | 0.47 | 12.56 | 0.45 | - | - |
-| Mono-Energy | ✓ | ✗ | 1.54 | 0.14 | 4.31 | 0.18 | 3.91 | 0.19 | 1.63 | 0.13 | 2.85 | 0.16 | - | - |
-| Stereo-Energy | ✓ | ✗ | 1.51 | 0.14 | 4.30 | 0.18 | 3.90 | 0.19 | 1.61 | 0.12 | 2.83 | 0.16 | - | - |
-| INRAS | ✓ | ✗ | 1.41 | 0.14 | 3.51 | 0.18 | 3.42 | 0.20 | 1.50 | 0.13 | 2.46 | 0.16 | 1.24 | 180 |
-| NAF | ✓ | ✗ | 1.24 | 0.14 | 3.26 | 0.18 | 3.35 | 0.19 | 1.28 | 0.12 | 2.28 | 0.16 | 1.10 | 99 |
-| VAM | ✓ | ✓ | 0.98 | 0.14 | 2.10 | 0.16 | 2.33 | 0.20 | 0.89 | 0.12 | 1.57 | 0.16 | 186.8 | 66 |
-| AV-NeRF | ✓ | ✓ | 0.93 | 0.13 | 2.01 | 0.16 | 2.23 | 0.18 | 0.85 | 0.11 | 1.50 | 0.15 | 48 | 79 |
-| ViGAS | ✓ | ✓ | 0.94 | 0.13 | 2.08 | 0.16 | 2.29 | 0.19 | 0.86 | 0.11 | 1.52 | 0.15 | 52.4 | 34 |
-| AV-GS | ✓ | ✓ | 0.86 | 0.12 | 1.97 | 0.15 | 2.03 | 0.18 | 0.79 | 0.11 | 1.42 | 0.14 | 18.40 | 12.5 |
-| AV-Cloud | ✓ | ✓ | 0.93 | 0.13 | 2.10 | 0.16 | 2.28 | 0.19 | 0.86 | 0.107 | 1.53 | 0.15 | 15.64 | 83 |
-| SAVAF (our) | ✓ | ✓ | **0.85** | **0.12** | **1.90** | **0.14** | **2.08** | **0.17** | **0.80** | **0.10** | **1.40** | **0.13** | **5.44** | **115** |
-
-### Ablation Studies
-
-Results showing the impact of different components:
-
-| Methods | MAG | ENV | Memory (MB) |
-|---------|-----|-----|-------------|
-| Baseline | 1.50 | 0.150 | 48 |
-| **SAVAF** | **1.40** | **0.130** | **5.44** |
-| w MLP | 1.45 | 0.140 | 49.5 |
-| w/o post-proc. | 0.143 | 0.136 | 4.60 |
-| w head-dim 4 | 1.46 | 0.137 | 3.50 |
+- **3D Generation Accuracy**: PSNR, SSIM, LPIPS
+- **Audio Synthesis Quality**: MAG distance, ENV distance, EDT, T60, C50
+- **Resource Utilization**: Memory (MB), FPS
 
 ## Citation
 
+```bibtex
+@inproceedings{savaf_av,
+  title={SAVAF: Sparse Audio-Visual 3D Rendering with Multi-Head Acoustic Field Attention},
+  author={Hasssan, A. , Meng J., Sugjin P., Seo, J.},
+  year={2026},
+}
+```
+
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
 - Thanks to the contributors and the open-source community
-- Special thanks to [AV-NeRF](https://liangsusan-git.github.io/project/avnerf/) and [NVS](https://arxiv.org/abs/2301.08730), which inspired this work.
-- We have borrowed some code from [AV-NeRF](https://github.com/liangsusan-git/AV-NeRF) and [NVS](https://github.com/facebookresearch/novel-view-acoustic-synthesis) for dataset loader preparation and baseline.
+- Special thanks to [AV-NeRF](https://liangsusan-git.github.io/project/avnerf/) and [NVS](https://arxiv.org/abs/2301.08730), which inspired this work
+- Code adapted from [AV-NeRF](https://github.com/liangsusan-git/AV-NeRF) and [NVS](https://github.com/facebookresearch/novel-view-acoustic-synthesis) for dataset loading and baselines
+
