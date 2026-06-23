@@ -94,6 +94,7 @@ release/
 ```bash
 cd /workspace/SAVAF-AV
 
+export AV_RESOLUTION="170 480"
 # All 13 scenes; stage 2 uses 2 GPUs in parallel
 N_GPUS=2 bash run_full_pipeline.sh
 
