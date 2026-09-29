@@ -1,3 +1,4 @@
+cd "$(cd "$(dirname "$0")/.." && pwd)"
 export CUDA_VISIBLE_DEVICES=0
 # Example SoundSpaces launcher — adjust paths for your environment.
 WORLD_SIZE=$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n' | wc -l)

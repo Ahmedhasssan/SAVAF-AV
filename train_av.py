@@ -49,8 +49,6 @@ from util import *
 import random
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-from paper_plots import create_publication_quality_plot
-
 # av_model = ANeRF_V2(conv=False,freq_num=257,time_num=173,intermediate_ch=128,p=0)
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from, checkpoint_path, av_model, eval_aud, av_checkpoint_path):
     first_iter = 0
@@ -245,7 +243,6 @@ def eval_audio(av_model, viewpoint_test_cam, gaussians, tb_writer, save=False):
                     mag_gt = data.mag_bi[b].cpu().numpy()
                     wav_gt = data.wav_bi[b].cpu().numpy()
                     loss_list = evaluator.update(mag_prd, mag_gt, wav_prd, wav_gt)
-                    create_publication_quality_plot(mag_gt, mag_prd, wav_gt, wav_prd,  data_idx)
 
                     if save:
                         save_list.append({"wav_prd": wav_prd,

@@ -6,17 +6,19 @@
 # the next scene starts on it.
 #
 # Usage examples:
-#   bash train_av_parallel.sh                 # all 13 scenes, 4 GPUs, default settings
-#   N_GPUS=8 bash train_av_parallel.sh        # use 8 GPUs
-#   SCENES="1 3 7" N_GPUS=2 bash train_av_parallel.sh
-#   GPU_IDS="2,4,6" bash train_av_parallel.sh # explicit GPU ids (3 GPUs from those)
-#   AV_RESOLUTION="64 180" N_GPUS=2 bash train_av_parallel.sh
+#   bash scripts/train_av_parallel.sh                 # all 13 scenes, 4 GPUs, default settings
+#   N_GPUS=8 bash scripts/train_av_parallel.sh        # use 8 GPUs
+#   SCENES="1 3 7" N_GPUS=2 bash scripts/train_av_parallel.sh
+#   GPU_IDS="2,4,6" bash scripts/train_av_parallel.sh # explicit GPU ids (3 GPUs from those)
+#   AV_RESOLUTION="64 180" N_GPUS=2 bash scripts/train_av_parallel.sh
 #
 # AV_RESOLUTION (default: 64 180) is forwarded to train_av.sh / train_av.py.
 # Per-scene logs land in ${LOG_DIR}/scene_<N>.log so they don't interleave.
 # Final summary prints exit codes for each scene.
 
 set -u
+
+cd "$(cd "$(dirname "$0")/.." && pwd)"
 
 # --- configurable knobs (override via env vars) ------------------------------
 SCENES="${SCENES:-1 2 3 4 5 6 7 8 9 10 11 12 13}"

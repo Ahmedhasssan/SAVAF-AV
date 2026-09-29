@@ -2,11 +2,11 @@
 # Sweep audio_chkpnt*.pth for one or more RWAVS scenes and report MAG/ENV.
 #
 # Usage:
-#   bash eval_checkpoints.sh 6
-#   bash eval_checkpoints.sh 6 10 12
-#   SCENES="1 2 3 4 5" bash eval_checkpoints.sh
-#   HIP_VISIBLE_DEVICES=1 bash eval_checkpoints.sh 6
-#   AV_RESOLUTION="64 180" bash eval_checkpoints.sh 6   # must match training resolution
+#   bash scripts/eval_checkpoints.sh 6
+#   bash scripts/eval_checkpoints.sh 6 10 12
+#   SCENES="1 2 3 4 5" bash scripts/eval_checkpoints.sh
+#   HIP_VISIBLE_DEVICES=1 bash scripts/eval_checkpoints.sh 6
+#   AV_RESOLUTION="64 180" bash scripts/eval_checkpoints.sh 6   # must match training resolution
 #
 # RWAVS category mapping (AV-NeRF eval.py):
 #   Office: 1-5 | House: 6-8 | Apt.: 9-11 | Out.: 12-13
@@ -14,7 +14,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "${SCRIPT_DIR}"
+ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "${ROOT}"
 
 DATA_DIR="${DATA_DIR:-/workspace/data/release}"
 OUTPUT_DIR="${OUTPUT_DIR:-/workspace/SAVAF-AV/output}"
@@ -28,8 +29,8 @@ if [[ $# -gt 0 ]]; then
 elif [[ -n "${SCENES:-}" ]]; then
     read -ra SCENE_LIST <<< "${SCENES}"
 else
-    echo "Usage: bash eval_checkpoints.sh <scene> [scene2 ...]"
-    echo "   or: SCENES=\"6 10 12\" bash eval_checkpoints.sh"
+    echo "Usage: bash scripts/eval_checkpoints.sh <scene> [scene2 ...]"
+    echo "   or: SCENES=\"6 10 12\" bash scripts/eval_checkpoints.sh"
     exit 1
 fi
 

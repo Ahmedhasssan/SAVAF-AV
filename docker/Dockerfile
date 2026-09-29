@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir \
     scikit-video \
     jaxtyping
 
-COPY docker-entrypoint.sh /docker-entrypoint.sh
+COPY docker/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
