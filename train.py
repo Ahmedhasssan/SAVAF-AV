@@ -55,8 +55,7 @@ def log_to_file(log_string, filename="evaluation_logs.txt"):
         f.write(log_string + "\n")
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from, checkpoint_path, eval_vision):
     first_iter = 0
-    loss_lpips = lpips.LPIPS(net='alex').cpu().eval()
-    # loss_lpips=loss_lpips.to('cuda').cpu().eval()
+    loss_lpips = lpips.LPIPS(net='alex').cuda().eval()
     os.makedirs(checkpoint_path, exist_ok=True)
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
@@ -101,7 +100,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                         l1_test += l1_loss(image, gt_image).mean().double()
                         psnr_test += psnr(image, gt_image).mean().double()
                         ssim_test += ssim(image, gt_image).mean().double()
-                        lpips_test += loss_lpips(image.cpu(), gt_image.cpu()).mean().double()
+                        with torch.no_grad():
+                            lpips_test += loss_lpips(image, gt_image).mean().double()
                     psnr_test /= len(config['cameras'])
                     ssim_test /= len(config['cameras'])
                     lpips_test /= len(config['cameras'])
@@ -269,7 +269,8 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                         l1_test += l1_loss(image, gt_image).mean().double()
                         psnr_test += psnr(image, gt_image).mean().double()
                         ssim_test += ssim(image, gt_image).mean().double()
-                        lpips_test += loss_lpips(image.cpu(), gt_image.cpu()).mean().double()
+                        with torch.no_grad():
+                            lpips_test += loss_lpips(image, gt_image).mean().double()
                     psnr_test /= len(config['cameras'])
                     l1_test /= len(config['cameras'])    
                     ssim_test /= len(config['cameras'])

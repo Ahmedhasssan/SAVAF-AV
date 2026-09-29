@@ -6,7 +6,7 @@
 #   bash eval_checkpoints.sh 6 10 12
 #   SCENES="1 2 3 4 5" bash eval_checkpoints.sh
 #   HIP_VISIBLE_DEVICES=1 bash eval_checkpoints.sh 6
-#   AV_RESOLUTION="170 480" bash eval_checkpoints.sh 6   # must match training resolution
+#   AV_RESOLUTION="64 180" bash eval_checkpoints.sh 6   # must match training resolution
 #
 # RWAVS category mapping (AV-NeRF eval.py):
 #   Office: 1-5 | House: 6-8 | Apt.: 9-11 | Out.: 12-13
@@ -37,15 +37,20 @@ RESULTS_TSV="$(mktemp)"
 trap 'rm -f "${RESULTS_TSV}"' EXIT
 
 parse_eval_line() {
-    python3 -c "
+    # stdout is silenced when train_av.py is passed --quiet, so the caller
+    # must leave stdout on. env is a Python float; mag is often np.float32.
+    printf '%s' "$1" | python3 -c '
 import re, sys
 text = sys.stdin.read()
-matches = re.findall(r\"\\{'env': ([^,]+), 'mag': np\\.float32\\(([^)]+)\\)\", text)
+matches = re.findall(
+    r"'\''env'\'': (?:np\.float\d+\()?([^,)]+)\)?, '\''mag'\'': (?:np\.float\d+\()?([^,)]+)\)?",
+    text,
+)
 if not matches:
     sys.exit(1)
 env, mag = matches[-1]
-print(f'{float(env):.6f},{float(mag):.6f}')
-" <<< "$1"
+print(f"{float(env):.6f},{float(mag):.6f}")
+'
 }
 
 scene_category() {
@@ -103,7 +108,7 @@ for scene in "${SCENE_LIST[@]}"; do
             --av-resolution "${AV_RES_H}" "${AV_RES_W}" \
             --eval_aud \
             --port "${port}" \
-            --quiet 2>&1)" || {
+            2>&1)" || {
             echo "  [fail] ${ckpt_name}: train_av.py exited with error"
             tail -n 8 <<< "${log}" | sed 's/^/    /'
             continue
@@ -164,6 +169,7 @@ cat_rows = defaultdict(list)
 for best in best_by_scene.values():
     cat_rows[best["category"]].append(best)
 
+# Published SAVAF category numbers, stored as (MAG, ENV).
 baseline = {
     "Office": (0.73, 0.12),
     "House": (1.85, 0.15),
@@ -174,23 +180,23 @@ baseline = {
 
 print()
 print("==> RWAVS Scene Categories (best checkpoint per evaluated scene)")
-print(f"{'Category':<10}  {'Scenes':<12}  {'ENV ↓':>8}  {'MAG ↓':>8}    SAVAF (our) ref.")
+print(f"{'Category':<10}  {'Scenes':<12}  {'ENV ↓':>8}  {'MAG ↓':>8}    ref ENV / MAG")
 for cat in cats:
     items = cat_rows.get(cat, [])
     if not items:
         print(f"{cat:<10}  {'—':<12}  {'—':>8}  {'—':>8}    "
-              f"{baseline[cat][0]:.2f} / {baseline[cat][1]:.2f}")
+              f"{baseline[cat][1]:.2f} / {baseline[cat][0]:.2f}")
         continue
-    scenes = ",".join(str(r["scene"] for r in sorted(items, key=lambda r: r["scene"]))
+    scenes = ",".join(str(r["scene"]) for r in sorted(items, key=lambda r: r["scene"]))
     env = sum(r["env"] for r in items) / len(items)
     mag = sum(r["mag"] for r in items) / len(items)
     print(f"{cat:<10}  {scenes:<12}  {env:8.3f}  {mag:8.3f}    "
-          f"{baseline[cat][0]:.2f} / {baseline[cat][1]:.2f}")
+          f"{baseline[cat][1]:.2f} / {baseline[cat][0]:.2f}")
 
 all_best = list(best_by_scene.values())
 if all_best:
     env = sum(r["env"] for r in all_best) / len(all_best)
     mag = sum(r["mag"] for r in all_best) / len(all_best)
     print(f"{'Overall':<10}  {f'n={len(all_best)}':<12}  {env:8.3f}  {mag:8.3f}    "
-          f"{baseline['Overall'][0]:.2f} / {baseline['Overall'][1]:.2f}")
+          f"{baseline['Overall'][1]:.2f} / {baseline['Overall'][0]:.2f}")
 PY

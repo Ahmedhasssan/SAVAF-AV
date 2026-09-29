@@ -9,7 +9,7 @@ for i in {1..13}; do
         -m "${OUTPUT_DIR}/$i" \
         --eval \
         --iterations 30010 \
-        --checkpoint_iteration 30010 \
+        --checkpoint_iterations 30010 \
         --checkpoint_path "${OUTPUT_DIR}/$i"
         # --start_checkpoint "${OUTPUT_DIR}/$i" \
         # --eval_vision

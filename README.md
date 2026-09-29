@@ -42,6 +42,44 @@ cd SAVAF-AV
 
 Inside the container, the repo is mounted at `/workspace/SAVAF-AV` and data at `/workspace/data`.
 
+That image is for AMD GPUs. It does not run on NVIDIA hardware.
+
+### Docker (NVIDIA CUDA)
+
+`Dockerfile.nvidia` builds the NVIDIA path from a PyTorch CUDA image. Pass `TORCH_CUDA_ARCH_LIST` as the compute capability of the GPU you are compiling for. The image caches the LPIPS weights, so containers run without network access.
+
+```bash
+docker build --network=host \
+    --build-arg TORCH_CUDA_ARCH_LIST=<compute-capability> \
+    -f Dockerfile.nvidia -t savaf-av:cuda .
+docker run --rm --gpus all savaf-av:cuda \
+    "python -c \"import torch, diff_gaussian_rasterization, simple_knn; print(torch.__version__, torch.cuda.get_device_name(0))\""
+```
+
+Mount the whole RWAVS `release/` folder (the loader reads `release/position.json`), plus writable `output/` and `logs/` folders:
+
+```bash
+mkdir -p output logs
+docker run --rm --gpus all --shm-size 32g \
+    -v "$PWD/data/release":/workspace/data/release \
+    -v "$PWD/output":/workspace/SAVAF-AV/output \
+    -v "$PWD/logs":/workspace/SAVAF-AV/logs \
+    -e SCENES="1 12" -e N_GPUS=2 -e AV_RESOLUTION="64 180" \
+    savaf-av:cuda "bash run_full_pipeline.sh"
+```
+
+This runs stage 1, stage 2, and the MAG/ENV summary described below. To score the visual model of a scene afterwards:
+
+```bash
+docker run --rm --gpus all \
+    -v "$PWD/data/release":/workspace/data/release \
+    -v "$PWD/output":/workspace/SAVAF-AV/output \
+    savaf-av:cuda \
+    "python render.py -m output/1 -s /workspace/data/release/1 --iteration 30010 --skip_train --quiet && python metrics.py -m output/1"
+```
+
+Stage 1 always uses the first visible GPU. To train several scenes at once, start one container per scene with `--gpus device=<id>`.
+
 ### Requirements
 
 - Python >= 3.10
@@ -61,7 +99,8 @@ Download and extract the dataset into `data/`:
 
 ```bash
 mkdir -p data
-huggingface-cli download susanliang/RWAVS RWAVS_Release.zip \
+python -m pip install -U huggingface_hub
+hf download susanliang/RWAVS RWAVS_Release.zip \
     --repo-type dataset --local-dir data
 cd data && unzip -o RWAVS_Release.zip
 ```
@@ -76,6 +115,8 @@ release/
 │   ├── feats_val.pkl
 │   ├── frames/
 │   ├── source_syn_re.wav
+│   ├── transforms_scale_train.json
+│   ├── transforms_scale_val.json
 │   ├── transforms_train.json
 │   └── transforms_val.json
 ├── ...
@@ -94,7 +135,7 @@ release/
 ```bash
 cd /workspace/SAVAF-AV
 
-export AV_RESOLUTION="170 480"
+export AV_RESOLUTION="64 180"
 # All 13 scenes; stage 2 uses 2 GPUs in parallel
 N_GPUS=2 bash run_full_pipeline.sh
 
@@ -122,22 +163,22 @@ Logs are written to `logs/stage1/scene_<N>.log` and `logs/stage2/scene_<N>.log`.
 
 ### Model resolution (`AV_RESOLUTION`)
 
-Stage 2 projects 3D Gaussians onto a 2D feature map before audio attention. The map size is controlled by `AV_RESOLUTION="HEIGHT WIDTH"` (or `--av-resolution HEIGHT WIDTH` in `train_av.py`).
+Stage 2 projects 3D Gaussians onto a 2D feature map before audio attention. The map size, and the parameter memory of the projection layer, is controlled by `AV_RESOLUTION="HEIGHT WIDTH"` (or `--av-resolution HEIGHT WIDTH` in `train_av.py`).
 
 
 | Setting           | Resolution | Approx. `feature_proj` size | Notes                                   |
 | ----------------- | ---------- | --------------------------- | --------------------------------------- |
-| Default (compact) | `64 180`   | ~5.8 MB                     | Current default                         |
-| Mid               | `85 240`   | ~10 MB                      | Good stepping stone                     |
-| Full              | `170 480`  | ~42 MB                      | Original setting in `model.py` comments |
+| Default (compact) | `64 180`   | ~5.8 MB                     | Recommended; within the 5–10 MB target |
+| Mid               | `85 240`   | ~10 MB                      | Upper end of the target                 |
+| Full              | `170 480`  | ~42 MB                      | Exceeds the recommended memory target   |
 
 
 ```bash
-# Higher resolution — retrain stage 2; old audio checkpoints are not compatible
-AV_RESOLUTION="170 480" SCENES="6 12" N_GPUS=2 bash train_av_parallel.sh
+# Compact model — retrain stage 2 after changing the resolution
+AV_RESOLUTION="64 180" SCENES="6 12" N_GPUS=2 bash train_av_parallel.sh
 
 # Eval must use the same resolution as training
-AV_RESOLUTION="170 480" bash eval_checkpoints.sh 6 12
+AV_RESOLUTION="64 180" bash eval_checkpoints.sh 6 12
 ```
 
 Stage 1 visual Gaussians are unchanged; only stage 2 needs to be re-run when you change resolution.
@@ -161,7 +202,7 @@ HIP_VISIBLE_DEVICES=0 python train.py \
     -m /workspace/SAVAF-AV/output/1 \
     --eval \
     --iterations 30010 \
-    --checkpoint_iteration 30010 \
+    --checkpoint_iterations 30010 \
     --checkpoint_path /workspace/SAVAF-AV/output/1
 ```
 
@@ -218,9 +259,10 @@ python train_av.py \
 
 ### Visual metrics (PSNR / SSIM / LPIPS)
 
-After stage 1, run standard 3DGS metrics:
+After stage 1, render the test split and run standard 3DGS metrics (LPIPS uses VGG):
 
 ```bash
+python render.py -m /workspace/SAVAF-AV/output/12 -s /workspace/data/release/12 --iteration 30010 --skip_train --quiet
 python metrics.py -m /workspace/SAVAF-AV/output/12
 ```
 

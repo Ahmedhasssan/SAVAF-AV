@@ -209,22 +209,24 @@ class MixDiffWithCrossAttention(nn.Module):
         camera_matrix = torch.matmul(x.full_proj_transform, x.world_view_transform)
         view_matrix = x.world_view_transform
         camera_pos = -torch.matmul(view_matrix[:3, :3].transpose(0, 1), view_matrix[:3, 3])
-        selected_indices = filter_gaussians_by_position(xyz=gaussians.get_xyz, camera_pos=camera_pos, max_distance=0.5)
+        # Stage-1 Gaussians are frozen here, so the projected map is a constant input.
+        with torch.no_grad():
+            selected_indices = filter_gaussians_by_position(xyz=gaussians.get_xyz, camera_pos=camera_pos, max_distance=0.5)
 
-        filtered_xyz = gaussians.get_xyz[selected_indices]
-        filtered_scaling = gaussians.get_scaling[selected_indices]
-        filtered_rotation = gaussians.get_rotation[selected_indices]
-        filtered_opacity = gaussians.get_opacity[selected_indices]
+            filtered_xyz = gaussians.get_xyz[selected_indices]
+            filtered_scaling = gaussians.get_scaling[selected_indices]
+            filtered_rotation = gaussians.get_rotation[selected_indices]
+            filtered_opacity = gaussians.get_opacity[selected_indices]
 
-        audio_feats = create_gaussian_feature_map(
-            filtered_xyz,
-            filtered_scaling,
-            filtered_rotation,
-            filtered_opacity,
-            camera_matrix,
-            resolution=self.resolution,
-            feature_dim=1,
-        )
+            audio_feats = create_gaussian_feature_map(
+                filtered_xyz,
+                filtered_scaling,
+                filtered_rotation,
+                filtered_opacity,
+                camera_matrix,
+                resolution=self.resolution,
+                feature_dim=1,
+            )
         v_feats = audio_feats["feature_map"]
         v_feats = v_feats.reshape(1, self.feature_dim)
         if self.training:

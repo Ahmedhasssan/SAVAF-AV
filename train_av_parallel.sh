@@ -10,7 +10,7 @@
 #   N_GPUS=8 bash train_av_parallel.sh        # use 8 GPUs
 #   SCENES="1 3 7" N_GPUS=2 bash train_av_parallel.sh
 #   GPU_IDS="2,4,6" bash train_av_parallel.sh # explicit GPU ids (3 GPUs from those)
-#   AV_RESOLUTION="170 480" N_GPUS=2 bash train_av_parallel.sh
+#   AV_RESOLUTION="64 180" N_GPUS=2 bash train_av_parallel.sh
 #
 # AV_RESOLUTION (default: 64 180) is forwarded to train_av.sh / train_av.py.
 # Per-scene logs land in ${LOG_DIR}/scene_<N>.log so they don't interleave.

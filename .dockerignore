@@ -1,0 +1,12 @@
+.git
+output
+logs
+data
+wandb
+runs
+paper_plot
+**/__pycache__
+**/*.pyc
+**/*.so
+**/build
+**/*.egg-info

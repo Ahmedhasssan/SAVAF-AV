@@ -11,7 +11,7 @@
 #   SKIP_STAGE2=1 bash run_full_pipeline.sh          # eval checkpoints only
 #   SKIP_EVAL=1 bash run_full_pipeline.sh            # train both stages, skip summary
 #   SKIP_EXISTING=1 bash run_full_pipeline.sh        # skip scenes with final ckpts
-#   AV_RESOLUTION="170 480" N_GPUS=2 bash run_full_pipeline.sh
+#   AV_RESOLUTION="64 180" N_GPUS=2 bash run_full_pipeline.sh
 #
 # Environment variables:
 #   SCENES          Space-separated scene ids (default: 1..13)
@@ -90,7 +90,7 @@ run_stage1() {
                 -m "${scene_dir}" \
                 --eval \
                 --iterations "${STAGE1_ITERATIONS}" \
-                --checkpoint_iteration "${STAGE1_ITERATIONS}" \
+                --checkpoint_iterations "${STAGE1_ITERATIONS}" \
                 --checkpoint_path "${scene_dir}" \
             > "${log}" 2>&1; then
             echo "[fail]   scene=${scene} stage1 — see ${log}"

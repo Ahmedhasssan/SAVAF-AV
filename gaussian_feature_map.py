@@ -63,7 +63,75 @@ class GaussianFeatureMap:
         
         return projected_params
     
-    def create_feature_map(self, projected_params, feature_encoding='default'):
+    def create_feature_map(self, projected_params, feature_encoding='default', chunk_size=512):
+        """
+        Create a 2D feature map from projected Gaussian parameters.
+
+        The default encoding is computed in chunks with the closed form of the
+        sequential blend F <- (1 - a_i) F + a_i f_i, i.e.
+        F = sum_i a_i f_i prod_{j>i} (1 - a_j). Other encodings use the loop.
+        """
+        if feature_encoding not in (None, 'default'):
+            return self._create_feature_map_loop(projected_params, feature_encoding)
+
+        H, W = self.resolution
+        D = self.feature_dim
+        positions = projected_params['positions']
+        dtype, device = positions.dtype, positions.device
+        depths = projected_params['depth']
+
+        sorted_indices = torch.argsort(depths)
+        positions = positions[sorted_indices]
+        scales = projected_params['scales'][sorted_indices]
+        opacities = projected_params['opacities'][sorted_indices]
+        N = positions.shape[0]
+
+        positions_img = positions.clone()
+        positions_img[:, 0] = (positions_img[:, 0] + 1) * W / 2
+        positions_img[:, 1] = (positions_img[:, 1] + 1) * H / 2
+        scales_img = scales * min(H, W) / 4
+
+        # Per-Gaussian features are constants (the loop filled them via .item()).
+        # Index 4 reads the unsorted depth array, matching the loop.
+        with torch.no_grad():
+            idx = torch.arange(N, device=device)
+            base = torch.stack([positions[:, 0], positions[:, 1],
+                                scales_img[:, 0] / (min(H, W) / 2),
+                                scales_img[:, 1] / (min(H, W) / 2),
+                                depths[:N], opacities.reshape(N)], dim=1).to(dtype)
+            features = torch.zeros(N, D, dtype=dtype, device=device)
+            features[:, :min(D, 6)] = base[:, :min(D, 6)]
+            if D > 6:
+                one_hot = torch.zeros(N, D, dtype=dtype, device=device)
+                one_hot[idx, idx % D] = 1.0
+                features[:, 6:] = one_hot[:, :D - 6]
+
+        y_grid, x_grid = torch.meshgrid(
+            torch.arange(H, dtype=dtype, device=device),
+            torch.arange(W, dtype=dtype, device=device),
+            indexing='ij'
+        )
+        grid = torch.stack([x_grid, y_grid], dim=-1).reshape(1, H * W, 2)
+
+        feature_map = torch.zeros(H * W, D, dtype=dtype, device=device)
+        for start in range(0, N, chunk_size):
+            end = min(start + chunk_size, N)
+            pos = positions_img[start:end].unsqueeze(1)
+            scale = scales_img[start:end].unsqueeze(1)
+            dist_sq = torch.sum(((grid - pos) / scale) ** 2, dim=-1)
+            influence = torch.exp(-0.5 * dist_sq) * opacities[start:end].reshape(-1, 1)
+            alpha = torch.where(influence > 0.01, influence, torch.zeros_like(influence))
+            transmit = torch.flip(torch.cumprod(torch.flip(1 - alpha, [0]), dim=0), [0])
+            after = torch.cat([transmit[1:], torch.ones_like(transmit[:1])], dim=0)
+            # Gaussians that touch no pixel are skipped by the loop; zero them so
+            # non-finite features (e.g. from depth ~0) cannot turn 0 * inf into NaN.
+            active = (alpha > 0).any(dim=1, keepdim=True)
+            chunk_features = torch.where(active, features[start:end], torch.zeros_like(features[start:end]))
+            feature_map = feature_map * transmit[0].unsqueeze(-1) + (alpha * after).t() @ chunk_features
+
+        return feature_map.reshape(H, W, D)
+
+    def _create_feature_map_loop(self, projected_params, feature_encoding='default'):
         """
         Create a 2D feature map from projected Gaussian parameters
         
