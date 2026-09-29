@@ -5,13 +5,13 @@
 #   Stage 3 — checkpoint sweep + MAG/ENV summary (eval_checkpoints.sh)
 #
 # Usage examples:
-#   bash run_full_pipeline.sh
-#   SCENES="1 2 3 4 5" N_GPUS=2 bash run_full_pipeline.sh
-#   SKIP_STAGE1=1 bash run_full_pipeline.sh          # gaussians already exist
-#   SKIP_STAGE2=1 bash run_full_pipeline.sh          # eval checkpoints only
-#   SKIP_EVAL=1 bash run_full_pipeline.sh            # train both stages, skip summary
-#   SKIP_EXISTING=1 bash run_full_pipeline.sh        # skip scenes with final ckpts
-#   AV_RESOLUTION="64 180" N_GPUS=2 bash run_full_pipeline.sh
+#   bash scripts/run_full_pipeline.sh
+#   SCENES="1 2 3 4 5" N_GPUS=2 bash scripts/run_full_pipeline.sh
+#   SKIP_STAGE1=1 bash scripts/run_full_pipeline.sh          # gaussians already exist
+#   SKIP_STAGE2=1 bash scripts/run_full_pipeline.sh          # eval checkpoints only
+#   SKIP_EVAL=1 bash scripts/run_full_pipeline.sh            # train both stages, skip summary
+#   SKIP_EXISTING=1 bash scripts/run_full_pipeline.sh        # skip scenes with final ckpts
+#   AV_RESOLUTION="64 180" N_GPUS=2 bash scripts/run_full_pipeline.sh
 #
 # Environment variables:
 #   SCENES          Space-separated scene ids (default: 1..13)
@@ -28,7 +28,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "${SCRIPT_DIR}"
+ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "${ROOT}"
 
 SCENES="${SCENES:-1 2 3 4 5 6 7 8 9 10 11 12 13}"
 REQUESTED_SCENES="${SCENES}"
@@ -38,8 +39,8 @@ STAGE1_GPU="${STAGE1_GPU:-0}"
 EVAL_GPU="${EVAL_GPU:-0}"
 DATA_DIR="${DATA_DIR:-/workspace/data/release}"
 OUTPUT_DIR="${OUTPUT_DIR:-/workspace/SAVAF-AV/output}"
-LOG_DIR_STAGE1="${LOG_DIR_STAGE1:-${SCRIPT_DIR}/logs/stage1}"
-LOG_DIR_STAGE2="${LOG_DIR_STAGE2:-${SCRIPT_DIR}/logs/stage2}"
+LOG_DIR_STAGE1="${LOG_DIR_STAGE1:-${ROOT}/logs/stage1}"
+LOG_DIR_STAGE2="${LOG_DIR_STAGE2:-${ROOT}/logs/stage2}"
 
 SKIP_STAGE1="${SKIP_STAGE1:-0}"
 SKIP_STAGE2="${SKIP_STAGE2:-0}"

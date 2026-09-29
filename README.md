@@ -31,13 +31,13 @@ git clone https://github.com/Ahmedhasssan/SAVAF-AV.git
 cd SAVAF-AV
 
 # First run: builds the image and starts the container
-./start-docker.sh
+./docker/start-docker.sh
 
 # Force image rebuild
-./start-docker.sh --rebuild
+./docker/start-docker.sh --rebuild
 
 # Drop and recreate the container
-./start-docker.sh --fresh
+./docker/start-docker.sh --fresh
 ```
 
 Inside the container, the repo is mounted at `/workspace/SAVAF-AV` and data at `/workspace/data`.
@@ -46,12 +46,12 @@ That image is for AMD GPUs. It does not run on NVIDIA hardware.
 
 ### Docker (NVIDIA CUDA)
 
-`Dockerfile.nvidia` builds the NVIDIA path from a PyTorch CUDA image. Pass `TORCH_CUDA_ARCH_LIST` as the compute capability of the GPU you are compiling for. The image caches the LPIPS weights, so containers run without network access.
+`docker/Dockerfile.nvidia` builds the NVIDIA path from a PyTorch CUDA image. Pass `TORCH_CUDA_ARCH_LIST` as the compute capability of the GPU you are compiling for. The image caches the LPIPS weights, so containers run without network access.
 
 ```bash
 docker build --network=host \
     --build-arg TORCH_CUDA_ARCH_LIST=<compute-capability> \
-    -f Dockerfile.nvidia -t savaf-av:cuda .
+    -f docker/Dockerfile.nvidia -t savaf-av:cuda .
 docker run --rm --gpus all savaf-av:cuda \
     "python -c \"import torch, diff_gaussian_rasterization, simple_knn; print(torch.__version__, torch.cuda.get_device_name(0))\""
 ```
@@ -65,7 +65,7 @@ docker run --rm --gpus all --shm-size 32g \
     -v "$PWD/output":/workspace/SAVAF-AV/output \
     -v "$PWD/logs":/workspace/SAVAF-AV/logs \
     -e SCENES="1 12" -e N_GPUS=2 -e AV_RESOLUTION="64 180" \
-    savaf-av:cuda "bash run_full_pipeline.sh"
+    savaf-av:cuda "bash scripts/run_full_pipeline.sh"
 ```
 
 This runs stage 1, stage 2, and the MAG/ENV summary described below. To score the visual model of a scene afterwards:
@@ -84,7 +84,7 @@ Stage 1 always uses the first visible GPU. To train several scenes at once, star
 
 - Python >= 3.10
 - PyTorch >= 2.6 (ROCm build for AMD GPUs)
-- See `Dockerfile` for the full dependency list (`amd_gsplat`, `librosa`, `einops`, `scikit-video`, etc.)
+- See `docker/Dockerfile` for the full dependency list (`amd_gsplat`, `librosa`, `einops`, `scikit-video`, etc.)
 
 ## Dataset Preparation
 
@@ -126,21 +126,21 @@ release/
 
 ## Quick Start (Full Pipeline)
 
-`run_full_pipeline.sh` runs all three stages end-to-end:
+`scripts/run_full_pipeline.sh` runs all three stages end-to-end:
 
 1. **Stage 1** — visual 3DGS (`train.py`) → `output/<scene>/chkpnt30010.pth`
 2. **Stage 2** — audio-visual training (`train_av_parallel.sh`) → `output/<scene>/audio_chkpnt*.pth`
-3. **Stage 3** — checkpoint sweep + **RWAVS Scene Categories** table (`eval_checkpoints.sh`)
+3. **Stage 3** — checkpoint sweep + **RWAVS Scene Categories** table (`scripts/eval_checkpoints.sh`)
 
 ```bash
 cd /workspace/SAVAF-AV
 
 export AV_RESOLUTION="64 180"
 # All 13 scenes; stage 2 uses 2 GPUs in parallel
-N_GPUS=2 bash run_full_pipeline.sh
+N_GPUS=2 bash scripts/run_full_pipeline.sh
 
 # Office scenes only (1–5)
-SCENES="1 2 3 4 5" N_GPUS=2 bash run_full_pipeline.sh
+SCENES="1 2 3 4 5" N_GPUS=2 bash scripts/run_full_pipeline.sh
 ```
 
 Useful flags:
@@ -175,10 +175,10 @@ Stage 2 projects 3D Gaussians onto a 2D feature map before audio attention. The 
 
 ```bash
 # Compact model — retrain stage 2 after changing the resolution
-AV_RESOLUTION="64 180" SCENES="6 12" N_GPUS=2 bash train_av_parallel.sh
+AV_RESOLUTION="64 180" SCENES="6 12" N_GPUS=2 bash scripts/train_av_parallel.sh
 
 # Eval must use the same resolution as training
-AV_RESOLUTION="64 180" bash eval_checkpoints.sh 6 12
+AV_RESOLUTION="64 180" bash scripts/eval_checkpoints.sh 6 12
 ```
 
 Stage 1 visual Gaussians are unchanged; only stage 2 needs to be re-run when you change resolution.
@@ -191,7 +191,7 @@ Trains sparse Gaussians for each scene (~30k iterations per scene).
 
 ```bash
 cd /workspace/SAVAF-AV
-bash train.sh
+bash scripts/train.sh
 ```
 
 Or a single scene:
@@ -213,15 +213,15 @@ Loads frozen Gaussians from stage 1 and trains `MixDiffWithCrossAttention` (~10k
 **Single scene:**
 
 ```bash
-bash train_av.sh 1          # scene 1 on GPU 0
-HIP_VISIBLE_DEVICES=1 bash train_av.sh 5
+bash scripts/train_av.sh 1          # scene 1 on GPU 0
+HIP_VISIBLE_DEVICES=1 bash scripts/train_av.sh 5
 ```
 
 **Multiple scenes in parallel** (one GPU per scene, auto-queues when GPUs are busy):
 
 ```bash
-SCENES="1 2 3 4 5" N_GPUS=2 bash train_av_parallel.sh
-SCENES="6 7 8 9 10 11 12 13" N_GPUS=7 bash train_av_parallel.sh
+SCENES="1 2 3 4 5" N_GPUS=2 bash scripts/train_av_parallel.sh
+SCENES="6 7 8 9 10 11 12 13" N_GPUS=7 bash scripts/train_av_parallel.sh
 ```
 
 Per-scene logs: `logs/stage2/scene_<N>.log`
@@ -230,15 +230,15 @@ Per-scene logs: `logs/stage2/scene_<N>.log`
 
 ### Checkpoint sweep
 
-`eval_checkpoints.sh` evaluates every `audio_chkpnt*.pth` for the given scenes, picks the best checkpoint per scene (min ENV, then MAG), and prints results grouped by RWAVS category with comparison to the published SAVAF (our) baseline.
+`scripts/eval_checkpoints.sh` evaluates every `audio_chkpnt*.pth` for the given scenes, picks the best checkpoint per scene (min ENV, then MAG), and prints results grouped by RWAVS category with comparison to the published SAVAF (our) baseline.
 
 ```bash
 # Single scene
-HIP_VISIBLE_DEVICES=0 bash eval_checkpoints.sh 6
+HIP_VISIBLE_DEVICES=0 bash scripts/eval_checkpoints.sh 6
 
 # Multiple scenes
-bash eval_checkpoints.sh 6 10 12
-SCENES="1 2 3 4 5" bash eval_checkpoints.sh
+bash scripts/eval_checkpoints.sh 6 10 12
+SCENES="1 2 3 4 5" bash scripts/eval_checkpoints.sh
 ```
 
 ### Inference only
@@ -279,20 +279,26 @@ The RWAVS benchmark groups 13 scenes into four environment types (same mapping a
 | Outdoor   | 12–13  | Out. ↓   |
 
 
-`eval_checkpoints.sh` and `run_full_pipeline.sh` (stage 3) print a **RWAVS Scene Categories** table with MAG and ENV averages per category and overall.
+`scripts/eval_checkpoints.sh` and `scripts/run_full_pipeline.sh` (stage 3) print a **RWAVS Scene Categories** table with MAG and ENV averages per category and overall.
 
 ## Repository Layout
 
 ```
 SAVAF-AV/
-├── train.py                  # Stage 1: visual 3DGS
-├── train.sh                    # Stage 1 launcher (all scenes)
+├── docker/
+│   ├── Dockerfile              # AMD ROCm image
+│   ├── Dockerfile.nvidia       # NVIDIA CUDA image
+│   ├── docker-entrypoint.sh
+│   └── start-docker.sh         # ROCm dev container
+├── scripts/
+│   ├── train.sh                # Stage 1 launcher (all scenes)
+│   ├── train_av.sh             # Stage 2 launcher (single scene)
+│   ├── train_av_parallel.sh    # Stage 2 parallel launcher
+│   ├── run_full_pipeline.sh    # End-to-end pipeline (stage 1 + 2 + eval)
+│   ├── eval_checkpoints.sh     # Checkpoint sweep + MAG/ENV summary
+│   └── train_soundspaces_av.sh
+├── train.py                    # Stage 1: visual 3DGS
 ├── train_av.py                 # Stage 2: audio-visual model
-├── train_av.sh                 # Stage 2 launcher (single scene)
-├── train_av_parallel.sh        # Stage 2 parallel launcher
-├── run_full_pipeline.sh        # End-to-end pipeline (stage 1 + 2 + eval)
-├── eval_checkpoints.sh         # Checkpoint sweep + MAG/ENV summary
-├── start-docker.sh             # ROCm Docker dev container
 ├── model.py                    # MixDiffWithCrossAttention and helpers
 ├── data.py                     # RWAVSDataset loader
 ├── train_av_ss.py              # SoundSpaces variant (separate benchmark)
@@ -305,7 +311,7 @@ SAVAF-AV/
 
 For SoundSpaces and NVS-Replay, use the dedicated repo: [SAVAF-SoundSpaces](https://github.com/Ahmedhasssan/SAVAF-SoundSpaces.git)
 
-This repo retains `train_av_ss.py`, `train_soundspaces_av.sh`, and `datasets/` for SoundSpaces experiments.
+This repo retains `train_av_ss.py`, `scripts/train_soundspaces_av.sh`, and `datasets/` for SoundSpaces experiments.
 
 ### Evaluation Metrics
 

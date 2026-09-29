@@ -2,16 +2,18 @@
 # Stage-2 audio-visual training for a single scene.
 #
 # Usage:
-#   bash train_av.sh           # trains scene 1 on the GPU set by HIP_VISIBLE_DEVICES (default 0)
-#   bash train_av.sh 5         # trains scene 5
-#   HIP_VISIBLE_DEVICES=3 bash train_av.sh 5   # trains scene 5 on GPU 3
-#   AV_RESOLUTION="64 180" bash train_av.sh 6
+#   bash scripts/train_av.sh           # trains scene 1 on the GPU set by HIP_VISIBLE_DEVICES (default 0)
+#   bash scripts/train_av.sh 5         # trains scene 5
+#   HIP_VISIBLE_DEVICES=3 bash scripts/train_av.sh 5   # trains scene 5 on GPU 3
+#   AV_RESOLUTION="64 180" bash scripts/train_av.sh 6
 #
 # AV_RESOLUTION controls MixDiffWithCrossAttention feature-map size (H W).
 # Default 64 180 (~5.8 MB). Use 85 240 (~10 MB) to stay near the upper target.
 # Audio checkpoints are resolution-specific — retrain stage 2 after changing this.
 
 set -e
+
+cd "$(cd "$(dirname "$0")/.." && pwd)"
 
 SCENE="${1:-1}"
 export HIP_VISIBLE_DEVICES="${HIP_VISIBLE_DEVICES:-0}"

@@ -1,3 +1,4 @@
+cd "$(cd "$(dirname "$0")/.." && pwd)"
 export HIP_VISIBLE_DEVICES=0
 DATA_DIR="/workspace/data/release"
 OUTPUT_DIR="/workspace/SAVAF-AV/output"

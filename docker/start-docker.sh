@@ -3,12 +3,12 @@ set -e
 
 CONTAINER_NAME="savaf-av-dev"
 IMAGE_NAME="savaf-av:latest"
-WORKSPACE_DIR="$(cd "$(dirname "$0")" && pwd)"
+WORKSPACE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 DATA_DIR="${WORKSPACE_DIR}/data"
 
 if [[ "$1" == "--rebuild" ]]; then
     echo "==> Forcing image rebuild..."
-    docker build --no-cache -t "${IMAGE_NAME}" "${WORKSPACE_DIR}"
+    docker build --no-cache -f "${WORKSPACE_DIR}/docker/Dockerfile" -t "${IMAGE_NAME}" "${WORKSPACE_DIR}"
     shift
 elif [[ "$1" == "--fresh" ]]; then
     echo "==> Removing existing container..."
@@ -18,7 +18,7 @@ fi
 
 if ! docker image inspect "${IMAGE_NAME}" &>/dev/null; then
     echo "==> Building Docker image..."
-    docker build -t "${IMAGE_NAME}" "${WORKSPACE_DIR}"
+    docker build -f "${WORKSPACE_DIR}/docker/Dockerfile" -t "${IMAGE_NAME}" "${WORKSPACE_DIR}"
 fi
 
 if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
