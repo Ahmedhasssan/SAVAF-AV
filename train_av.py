@@ -12,42 +12,19 @@
 import os
 import torch
 from random import randint
-from utils.loss_utils import l1_loss, ssim
 from gaussian_renderer import render, network_gui
 import sys
 from scene import Scene, GaussianModel
 from utils.general_utils import safe_state
-import uuid
 from tqdm import tqdm
-from utils.image_utils import psnr
-from argparse import ArgumentParser, Namespace
+from argparse import ArgumentParser
 from arguments import ModelParams, PipelineParams, OptimizationParams
-try:
-    from torch.utils.tensorboard import SummaryWriter
-    TENSORBOARD_FOUND = True
-except ImportError:
-    TENSORBOARD_FOUND = False
 
-import pickle
-import argparse
 import numpy as np
-from tqdm import tqdm
-import soundfile as sf
-
-import torch
-import torch.multiprocessing as mp
-import torch.distributed as dist
-import torch.backends.cudnn as cudnn
 import torch.nn.functional as F
-import time
 
-from utils.graphics_utils import fov2focal, focal2fov
-from scene.cameras import Camera, Camera2, save_video
-from data import RWAVSDataset
 from model import *
 from util import *
-import random
-from torch.nn.parallel import DistributedDataParallel as DDP
 
 # av_model = ANeRF_V2(conv=False,freq_num=257,time_num=173,intermediate_ch=128,p=0)
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from, checkpoint_path, av_model, eval_aud, av_checkpoint_path):
@@ -113,14 +90,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 model_state_dict = checkpoint[0]  # First element is the model state dict
                 av_model.load_state_dict(model_state_dict)
             print("Loading checkpoint from: ", args.av_checkpoint_path)
-            viewpoint_test = None
             with torch.no_grad():
-                if not viewpoint_test:
-                    viewpoint_test = scene.getTestCameras().copy()
-                viewpoint_test_cam = viewpoint_test.pop(randint(0, len(viewpoint_test)-1))
-                # eval(viewpoint_test, gaussians, tb_writer, pipe, bg, save=False)
-                bg = torch.rand((3), device="cuda") if opt.random_background else background
-                # inference(gaussians, "./inference_3d", pipe, "office", iteration, bg)
+                viewpoint_test = scene.getTestCameras().copy()
                 eval_audio(av_model, viewpoint_test, gaussians, None, save=False)
                 break
 
@@ -161,69 +132,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 torch.save((state_dict_vision, iteration), os.path.join(checkpoint_path, "audio_chkpnt" + str(iteration) + ".pth"))
 
             if iteration % opt.iterations == 0:
-                # Pick a random Camera
-                viewpoint_test = None
-                if not viewpoint_test:
-                    viewpoint_test = scene.getTestCameras().copy()
-                viewpoint_test_cam = viewpoint_test.pop(randint(0, len(viewpoint_test)-1))
-                # eval(viewpoint_test, gaussians, tb_writer, pipe, bg, save=False)
+                viewpoint_test = scene.getTestCameras().copy()
                 eval_audio(av_model, viewpoint_test, gaussians, None, save=False)
-                # inference(gaussians, "./inference_3d", pipe, "office", iteration, bg)
-
-# Lazy/optional imports — only required by the 3D-orbit inference helpers below,
-# which are not exercised by the standard Stage-2 audio-visual training loop.
-try:
-    from kiui.cam import orbit_camera
-    import imageio
-except ImportError:
-    orbit_camera = None
-    imageio = None
-
-def get_cam_views(cam_poses):
-    c2w = cam_poses
-    c2w[:3, 1:3] *= -1
-    #import pdb;pdb.set_trace()
-    c2w[0:2] *= -1
-    w2c = np.linalg.inv(c2w)
-    R = np.transpose(w2c[:3,:3])  # R is stored transposed due to 'glm' in CUDA code
-    #R = w2c[:3,:3]
-    T = w2c[:3, 3]
-    fovx = 1250.0000504168488
-    fovy = 1250.0000504168488
-    fovy = focal2fov(fov2focal(fovx, 270), 480)
-    FovY = fovy 
-    FovX = fovx
-    camera_views = Camera2(R, T, FovX, FovY)
-    return camera_views
-
-@torch.no_grad()
-def inference(gaussians, model_path_new, pipe, scene_name, iteration, bg):
-    threeD_path = os.path.join(model_path_new, "3D")
-    if not os.path.exists(threeD_path):
-        os.mkdir(threeD_path)
-    # import pdb;pdb.set_trace()
-    elevation = -85
-    cam_radius = 6.5
-    images = []
-    azimuth = np.arange(0, 720, 4, dtype=np.int32)
-    for azi in tqdm(azimuth):
-        cam_poses = torch.from_numpy(orbit_camera(elevation, azi, radius=cam_radius, opengl=True))
-        #import pdb;pdb.set_trace()
-        viewpoint_cam_list = get_cam_views(cam_poses)
-        image = render(viewpoint_cam_list, gaussians, pipe, bg)["render"]
-        import torchvision.utils as vutils
-        vutils.save_image(image, os.path.join(threeD_path, scene_name + '_' + str(iteration) + '_' + str(azi) + '.png'), normalize=True, range=(-1, 1))
-        image = image.unsqueeze(0)
-        # import pdb;pdb.set_trace()
-        images.append((image.permute(0,2,3,1).contiguous().float().cpu().numpy() * 255).astype(np.uint8))
-    images = np.concatenate(images, axis=0)
-    try:
-        # import pdb;pdb.set_trace()
-        # save_video([a for a in images], os.path.join(threeD_path, scene_name +'_'+str(iteration) + '.mp4'),)
-        imageio.mimwrite(os.path.join(threeD_path, scene_name +'_'+str(iteration) + '.mp4'), images, fps=30)
-    except:
-        import pdb;pdb.set_trace()
-    print("Rendering is finished")
 
 @torch.no_grad()
 def eval_audio(av_model, viewpoint_test_cam, gaussians, tb_writer, save=False):

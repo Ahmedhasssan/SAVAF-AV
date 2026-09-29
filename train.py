@@ -28,28 +28,8 @@ try:
 except ImportError:
     TENSORBOARD_FOUND = False
 
-import pickle
-import argparse
-import numpy as np
-from tqdm import tqdm
-import soundfile as sf
-
-import torch
-import torch.multiprocessing as mp
-import torch.distributed as dist
-import torch.backends.cudnn as cudnn
-import torch.nn.functional as F
-
-from utils.graphics_utils import fov2focal, focal2fov
-from scene.cameras import Camera, Camera2, save_video
 import lpips
 
-from data import RWAVSDataset
-from model import *
-from util import *
-# av_model = ANeRF_V2(conv=False,freq_num=257,time_num=173,intermediate_ch=128,p=0)
-av_model = MixDiffWithCrossAttention(conv=True, p=0.1)
-evaluator = Evaluator()
 def log_to_file(log_string, filename="evaluation_logs.txt"):
     with open(filename, "a") as f:
         f.write(log_string + "\n")
@@ -60,7 +40,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
     scene = Scene(dataset, gaussians, checkpoint_path)
-    av_optimizer = torch.optim.Adam(av_model.parameters(), lr=5e-4, weight_decay=1e-4)
     gaussians.training_setup(opt)
     if checkpoint:
         (model_params, first_iter) = torch.load(
@@ -209,14 +188,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             if (iteration in checkpoint_iterations):
                 print("\n[ITER {}] Saving Checkpoint".format(iteration))
                 torch.save((gaussians.capture(), iteration), checkpoint_path + "/chkpnt" + str(iteration) + ".pth")
-            if iteration % 3000 == 0:
-                # Pick a random Camera
-                viewpoint_test = None
-                if not viewpoint_test:
-                    viewpoint_test = scene.getTestCameras().copy()
-                viewpoint_test_cam = viewpoint_test.pop(randint(0, len(viewpoint_test)-1))
-                # eval(viewpoint_test, gaussians, tb_writer, pipe, bg, save=False)
-                # inference(gaussians, "./inference_3d", pipe, "office", iteration, bg)
 
 def prepare_output_and_logger(args):    
     if not args.model_path:
@@ -287,100 +258,6 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
             tb_writer.add_histogram("scene/opacity_histogram", scene.gaussians.get_opacity, iteration)
             tb_writer.add_scalar('total_points', scene.gaussians.get_xyz.shape[0], iteration)
         torch.cuda.empty_cache()
-
-# from kiui.cam import orbit_camera
-# import imageio
-
-def get_cam_views(cam_poses):
-    c2w = cam_poses
-    c2w[:3, 1:3] *= -1
-    #import pdb;pdb.set_trace()
-    c2w[0:2] *= -1
-    w2c = np.linalg.inv(c2w)
-    R = np.transpose(w2c[:3,:3])  # R is stored transposed due to 'glm' in CUDA code
-    #R = w2c[:3,:3]
-    T = w2c[:3, 3]
-    fovx = 1250.0000504168488
-    fovy = 1250.0000504168488
-    fovy = focal2fov(fov2focal(fovx, 270), 480)
-    FovY = fovy 
-    FovX = fovx
-    camera_views = Camera2(R, T, FovX, FovY)
-    return camera_views
-
-@torch.no_grad()
-def inference(gaussians, model_path_new, pipe, scene_name, iteration, bg):
-    threeD_path = os.path.join(model_path_new, "3D")
-    if not os.path.exists(threeD_path):
-        os.mkdir(threeD_path)
-    # import pdb;pdb.set_trace()
-    elevation = -85
-    cam_radius = 6.5
-    images = []
-    azimuth = np.arange(0, 720, 4, dtype=np.int32)
-    for azi in tqdm(azimuth):
-        cam_poses = torch.from_numpy(orbit_camera(elevation, azi, radius=cam_radius, opengl=True))
-        #import pdb;pdb.set_trace()
-        viewpoint_cam_list = get_cam_views(cam_poses)
-        image = render(viewpoint_cam_list, gaussians, pipe, bg)["render"]
-        image = image.unsqueeze(0)
-        # import pdb;pdb.set_trace()
-        images.append((image.permute(0,2,3,1).contiguous().float().cpu().numpy() * 255).astype(np.uint8))
-    images = np.concatenate(images, axis=0)
-    try:
-        # import pdb;pdb.set_trace()
-        save_video([a for a in images], os.path.join(threeD_path, scene_name +'_'+str(iteration) + '.mp4'),)
-        # imageio.mimwrite(os.path.join(threeD_path, scene_name +'_'+str(iteration) + '.mp4'), images, fps=30)
-    except:
-        import pdb;pdb.set_trace()
-    print("Rendering is finished")
-
-def eval(viewpoint_test_cam, gaussians, tb_writer, pipe, bg, save=False):
-        av_model.eval()
-        evaluator = Evaluator()
-        save_list = []
-        with torch.no_grad():
-            t = tqdm(total=len(viewpoint_test_cam), desc=f"[EPOCH {30000} EVAL]", leave=False)
-            for data_idx, data in enumerate(viewpoint_test_cam):
-                render_pkg = render(data, gaussians, pipe, bg)
-                image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
-
-def eval_audio(viewpoint_test_cam, gaussians, tb_writer, save=False):
-        av_model.eval()
-        evaluator = Evaluator()
-        save_list = []
-        with torch.no_grad():
-            t = tqdm(total=len(viewpoint_test_cam), desc=f"[EPOCH {30000} EVAL]", leave=False)
-            for data_idx, data in enumerate(viewpoint_test_cam):
-
-                ret = av_model(data, gaussians)
-                for b in range(data.mag_bi.shape[0]):
-                    mag_prd = ret["reconstr"][b].cpu().numpy()
-                    phase_prd = data.phase_sc[b].cpu().numpy()
-                    spec_prd = mag_prd * np.exp(1j * phase_prd[np.newaxis,:])
-                    wav_prd = librosa.istft(spec_prd.transpose(0, 2, 1), length=22050)
-                    mag_gt = data.mag_bi[b].cpu().numpy()
-                    wav_gt = data.wav_bi[b].cpu().numpy()
-                    loss_list = evaluator.update(mag_prd, mag_gt, wav_prd, wav_gt)
-                    if save:
-                        save_list.append({"wav_prd": wav_prd,
-                                          "wav_gt": wav_gt,
-                                          "loss": loss_list,
-                                          "img_idx": data["img_idx"][b].cpu().numpy()})
-                t.update()
-            t.close()
-        result = evaluator.report()
-        print(result)
-        # import pdb;pdb.set_trace()
-        # if hasattr("writer"):
-        #     for k, v in result.items():
-        #         tb_writer.add_scalar(f"eval/{k}", v, 30000)
-        
-        # if save:
-        #     return result, save_list
-        # else:
-        #     return result
-
 
 if __name__ == "__main__":
     # Set up command line argument parser
