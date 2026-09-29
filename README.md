@@ -322,10 +322,13 @@ This repo retains `train_av_ss.py`, `scripts/train_soundspaces_av.sh`, and `data
 ## Citation
 
 ```bibtex
-@inproceedings{savaf_av,
-  title={SAVAF: Sparse Audio-Visual 3D Rendering with Multi-Head Acoustic Field Attention},
-  author={Hasssan, A. , Meng J., Sugjin P., Seo, J.},
+@inproceedings{hasssan2026savaf,
+  title={SAVAF: Sparse Audio-Visual Rendering with Multihead Acoustic Field Attention Network},
+  author={Hasssan, Ahmed and Meng, Jian and Park, Sungjin and Seo, Jae-sun},
+  booktitle={International Conference on Pattern Recognition},
+  pages={78--93},
   year={2026},
+  organization={Springer}
 }
 ```
 
