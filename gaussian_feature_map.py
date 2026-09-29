@@ -1,6 +1,5 @@
 import numpy as np
 import torch
-import matplotlib.pyplot as plt
 
 class GaussianFeatureMap:
     def __init__(self, resolution=(270, 480), feature_dim=32):
@@ -275,139 +274,24 @@ class GaussianFeatureMap:
         features = torch.cat([torch.sin(projection), torch.cos(projection)], dim=-1)
         
         return features
-    
-    def visualize_feature_map(self, feature_map, method='pca'):
-        """
-        Visualize the feature map for inspection
-        
-        Args:
-            feature_map: Feature map tensor of shape [H, W, feature_dim]
-            method: Visualization method ('pca', 'rgb', 'channels')
-            
-        Returns:
-            Matplotlib figure
-        """
-        feature_map_np = feature_map.detach().cpu().numpy()
-        H, W, C = feature_map_np.shape
-        
-        if method == 'pca':
-            # PCA visualization (reduce to 3 dimensions for RGB)
-            from sklearn.decomposition import PCA
-            
-            # Reshape to [H*W, C]
-            features_flat = feature_map_np.reshape(-1, C)
-            
-            # Fit PCA
-            pca = PCA(n_components=3)
-            features_pca = pca.fit_transform(features_flat)
-            
-            # Normalize to [0, 1] for RGB
-            features_pca = (features_pca - features_pca.min(axis=0)) / \
-                          (features_pca.max(axis=0) - features_pca.min(axis=0) + 1e-8)
-            
-            # Reshape back to image
-            rgb_image = features_pca.reshape(H, W, 3)
-            
-            # Create figure
-            fig, ax = plt.subplots(figsize=(10, 10))
-            ax.imshow(rgb_image)
-            ax.set_title('PCA Visualization of Feature Map')
-            ax.axis('off')
-            
-        elif method == 'rgb':
-            # Use first 3 channels as RGB
-            rgb_channels = min(3, C)
-            rgb_image = feature_map_np[:, :, :rgb_channels]
-            
-            # Normalize each channel
-            for i in range(rgb_channels):
-                channel = rgb_image[:, :, i]
-                rgb_image[:, :, i] = (channel - channel.min()) / (channel.max() - channel.min() + 1e-8)
-            
-            # Pad if needed
-            if rgb_channels < 3:
-                padding = np.zeros((H, W, 3 - rgb_channels))
-                rgb_image = np.concatenate([rgb_image, padding], axis=-1)
-            
-            # Create figure
-            fig, ax = plt.subplots(figsize=(10, 10))
-            ax.imshow(rgb_image)
-            ax.set_title('First 3 Channels as RGB')
-            ax.axis('off')
-            
-        else:  # 'channels'
-            # Show individual channels
-            num_channels = min(16, C)  # Show up to 16 channels
-            rows, cols = int(np.ceil(np.sqrt(num_channels))), int(np.ceil(np.sqrt(num_channels)))
-            
-            fig, axes = plt.subplots(rows, cols, figsize=(15, 15))
-            axes = axes.flatten()
-            
-            for i in range(num_channels):
-                channel = feature_map_np[:, :, i]
-                normalized = (channel - channel.min()) / (channel.max() - channel.min() + 1e-8)
-                
-                axes[i].imshow(normalized, cmap='viridis')
-                axes[i].set_title(f'Channel {i}')
-                axes[i].axis('off')
-            
-            # Hide unused subplots
-            for i in range(num_channels, len(axes)):
-                axes[i].axis('off')
-            
-            plt.tight_layout()
-        
-        return fig
 
-# Example usage
 def create_gaussian_feature_map(
     positions,
     scales,
     rotations,
     opacities,
     camera_matrix,
-    n_gaussians=100,
     resolution=(170, 240),
     feature_dim=1,
     feature_encoding='default',
-    viz_method='pca',
 ):
-    # # Create sample Gaussian parameters
-    # positions = torch.randn(n_gaussians, 3)  # xyz positions
-    # scales = torch.abs(torch.randn(n_gaussians, 3)) + 0.5  # positive xyz scales
-    # rotations = torch.randn(n_gaussians, 4)  # quaternion rotations
-    rotations = rotations / rotations.norm(dim=1, keepdim=True)  # normalize quaternions
-    # opacities = torch.sigmoid(torch.randn(n_gaussians, 1))  # opacity values in [0, 1]
-    
-    # Create the converter
+    rotations = rotations / rotations.norm(dim=1, keepdim=True)
     converter = GaussianFeatureMap(resolution=resolution, feature_dim=feature_dim)
-    
-    # Project Gaussians to 2D
     projected_params = converter.project_gaussians(positions, scales, rotations, opacities, camera_matrix=camera_matrix)
-    
-    # Create feature map
     feature_map = converter.create_feature_map(projected_params, feature_encoding=feature_encoding)
-    
-    # # Visualize feature map
-    # fig = converter.visualize_feature_map(feature_map, method=viz_method)
-    
     return {
         'projected_params': projected_params,
         'feature_map': feature_map.permute(2,0,1)
-        # 'visualization': fig
     }
-
-# Run with different settings
-if __name__ == "__main__":
-    # Default settings
-    results = create_gaussian_feature_map(
-        n_gaussians=100,
-        resolution=(256, 256),
-        feature_dim=32,
-        feature_encoding='default',
-        viz_method='pca'
-    )
-    plt.show()
-    plt.savefig('feature_map.jpg')
 
 

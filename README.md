@@ -300,7 +300,6 @@ SAVAF-AV/
 ├── train.py                    # Stage 1: visual 3DGS
 ├── train_av.py                 # Stage 2: audio-visual model
 ├── model.py                    # MixDiffWithCrossAttention and helpers
-├── data.py                     # RWAVSDataset loader
 ├── train_av_ss.py              # SoundSpaces variant (separate benchmark)
 ├── output/                     # Checkpoints (gitignored)
 ├── logs/                       # Training logs (gitignored)
